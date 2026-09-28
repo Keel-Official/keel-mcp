@@ -80,11 +80,25 @@ function route(url: URL) {
 
 let client: Client;
 let calls: { method: string; url: string }[];
+let blendCalls: string[][];
 
 beforeEach(async () => {
   const fake = fakeFetch(route);
   calls = fake.calls;
-  const server = createKeelMcpServer({ baseUrl: 'https://api.test/v1', fetch: fake.fetch });
+  blendCalls = [];
+  const server = createKeelMcpServer({
+    baseUrl: 'https://api.test/v1',
+    fetch: fake.fetch,
+    blendAudit: async (poolIds) => {
+      blendCalls.push(poolIds);
+      return poolIds.map((poolId) => ({
+        pool: { poolId, name: 'TestPool', status: 3, statusLabel: 'on-ice (new borrowing disabled)', oracle: 'C', latestLedger: 1, loadedAt: 't', rpcUrl: 'r' },
+        reserves: [],
+        summary: { supplied_exceeds: 0, cap_exceeds: 0, within: 0, unknown: 0, not_monitored: 0, not_collateral: 0 },
+        interpretation: ['ON Stellar only'],
+      }));
+    },
+  });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   client = new Client({ name: 'test', version: '0.0.0' });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -97,10 +111,10 @@ async function call(name: string, args: Record<string, unknown> = {}) {
 }
 
 describe('keel-mcp server', () => {
-  it('lists the nine read-only tools, one resource pair and the prompt', async () => {
+  it('lists the ten read-only tools, one resource pair and the prompt', async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
-      'check_collateral_size', 'compare_assets', 'estimate_trade_depth', 'find_asset', 'get_asset_risk',
+      'audit_blend_pool', 'check_collateral_size', 'compare_assets', 'estimate_trade_depth', 'find_asset', 'get_asset_risk',
       'get_methodology', 'get_risk_history', 'keel_status', 'list_assets',
     ]);
     expect(tools.every((t) => t.annotations?.readOnlyHint === true)).toBe(true);
@@ -187,6 +201,21 @@ describe('keel-mcp server', () => {
     expect(result.isError).toBeFalsy();
     expect(data.assets).toHaveLength(3);
     expect(data.assets[2].error.code).toBe('ASSET_NOT_MONITORED');
+  });
+
+  it('audit_blend_pool audits every known pool by default and one pool by name', async () => {
+    const all = await call('audit_blend_pool');
+    expect(all.result.isError).toBeFalsy();
+    expect(blendCalls[0]).toHaveLength(2);
+    expect(all.text).toContain('## Blend pool TestPool');
+    await call('audit_blend_pool', { pool: 'yieldblox' });
+    expect(blendCalls[1]).toEqual(['CCCCIQSDILITHMM7PBSLVDT5MISSY7R26MNZXCX4H7J5JQ5FPIYOGYFS']);
+  });
+
+  it('audit_blend_pool rejects an unknown pool without reading the chain', async () => {
+    const { result } = await call('audit_blend_pool', { pool: 'Aave' });
+    expect(result.isError).toBe(true);
+    expect(blendCalls).toHaveLength(0);
   });
 
   it('keel_status reports the latest scan', async () => {

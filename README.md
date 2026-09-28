@@ -55,6 +55,7 @@ claude mcp add keel -- node /absolute/path/to/keel-mcp/dist/index.js
 | `KEEL_API_URL` | `https://api.keels.app/v1` | Point at another deployment, or at the contract mock (`http://localhost:4010`) |
 | `KEEL_TIMEOUT_MS` | `15000` | Per request timeout |
 | `KEEL_CACHE_TTL_MS` | `60000` | Cache for the asset list and methodology. Scans run every 15 minutes |
+| `KEEL_SOROBAN_RPC_URL` | `https://mainnet.sorobanrpc.com` | Soroban RPC used by `audit_blend_pool` to read Blend pools |
 
 ## Tools
 
@@ -74,6 +75,7 @@ data is.
 | `get_risk_history` | Band, depth and collateral over a ledger window or every stored reading of one source, with band changes |
 | `compare_assets` | 2 to 10 assets side by side |
 | `get_methodology` | Methodology version, every threshold, and the calibration note |
+| `audit_blend_pool` | A Blend lending pool's collateral caps and current supply set beside Keel's safe size for each asset (see below) |
 
 **Resources:** `keel://methodology` (JSON) and `keel://report/blend-february-2026`, the open
 backtest report on the February 2026 Blend incident.
@@ -81,6 +83,33 @@ backtest report on the February 2026 Blend incident.
 **Prompt:** `assess_collateral(assetId, amount, protocol?)` runs the tools in order and
 asks for an answer that states the verdict, the binding limit, the band and its confidence,
 every unevaluated flag, and the provenance.
+
+## Blend Pool Cap Audit
+
+`audit_blend_pool` (and `npm run audit:blend`, which writes a markdown and a JSON report to
+`reports/`) reads a Blend V2 lending pool from Stellar: every reserve's collateral factor,
+supply cap, total supplied and total borrowed, and the pool oracle's price. For each reserve
+that can back a loan it converts the **supply cap** (what the pool is configured to accept)
+and the **total supplied** (what it holds now) to USDC at Keel's executable price, and sets
+both beside Keel's `maxSafeCollateral`.
+
+Per reserve it answers `supplied_exceeds`, `cap_exceeds`, `within`, `unknown`,
+`not_monitored` or `not_collateral` (collateral factor 0 or disabled), plus the gap between
+the Blend oracle price and Keel's executable price.
+
+Three things to know when reading it, and every report prints them:
+
+1. Keel's safe size is defined for ONE collateral position. Reading a whole reserve against
+   it is the natural reading for liquidations (they all sell into the same book) and a
+   conservative one for manipulation (an attacker controls one position).
+2. Keel measures liquidity **on Stellar** only. XLM, with deep centralized-exchange markets,
+   reads as far riskier here than its whole market is. "Exceeds" means "exceeds what Stellar
+   itself can absorb", which is what an on-chain liquidation depends on.
+3. It is a comparison with published figures, not a recommended cap. Keel computes no cap of
+   its own.
+
+Known pools: `YieldBlox` and `Fixed` (Blend V2 mainnet). Any other pool can be passed by
+contract id.
 
 ## Example
 
@@ -116,8 +145,10 @@ These rules come from Keel's engine and are enforced here as well:
 
 ## What this server will never do
 
-- Sign or submit a transaction, or hold a key. Keel is permanently read-only, and the test
-  suite fails if `src/` issues anything but a GET.
+- Sign or submit a transaction, or hold a key. Keel is permanently read-only. The Keel API is
+  read with GET only, and the test suite fails if `src/` issues anything else. Blend pools are
+  read through Soroban RPC with `getLedgerEntries`, and oracle prices with `simulateTransaction`
+  on an unsigned, never-submitted transaction, which is how a Soroban contract is read.
 - Publish a price feed or act as an oracle.
 - Send alerts, webhooks or notifications.
 - Make a credit or investment decision. It reports liquidity; the lender decides.

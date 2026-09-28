@@ -50,10 +50,13 @@
     "generate:api": "openapi-typescript openapi/keel-openapi.yaml -o src/api/schema.d.ts",
     "sync:contract": "node scripts/sync-contract.mjs && npm run generate:api",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "audit:blend": "tsx scripts/audit-blend.ts"
   },
   "dependencies": {
+    "@blend-capital/blend-sdk": "^3.3.1",
     "@modelcontextprotocol/sdk": "^1.17.0",
+    "@stellar/stellar-sdk": "16.3.0",
     "decimal.js": "^10.6.0",
     "openapi-fetch": "^0.17.0",
     "zod": "^3.25.0"

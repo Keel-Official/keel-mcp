@@ -24,6 +24,7 @@ async function main() {
     baseUrl,
     timeoutMs: positiveInt('KEEL_TIMEOUT_MS'),
     cacheTtlMs: positiveInt('KEEL_CACHE_TTL_MS'),
+    sorobanRpcUrl: process.env.KEEL_SOROBAN_RPC_URL || undefined,
   });
   await server.connect(new StdioServerTransport());
   log(`v${SERVER_VERSION} ready on stdio, reading ${baseUrl}`);

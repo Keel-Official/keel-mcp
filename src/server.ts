@@ -3,7 +3,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createKeelApi, type KeelApi, type KeelApiOptions } from './api/client.js';
 import { registerPrompts } from './prompts.js';
 import { registerResources } from './resources.js';
+import { runBlendAudit } from './blend/run.js';
 import { registerAssetRisk } from './tools/asset-risk.js';
+import { registerBlendAudit, type BlendAuditRunner } from './tools/blend-audit.js';
 import { registerCollateral } from './tools/collateral.js';
 import { registerCompare } from './tools/compare.js';
 import { registerFindAsset } from './tools/find-asset.js';
@@ -18,7 +20,7 @@ export const SERVER_VERSION = '0.1.0';
 
 const INSTRUCTIONS = `Keel measures the executable liquidity behind Stellar asset prices: how much volume the SDEX order book and AMM pools can absorb at +/-2%, 5% and 10%, and the largest collateral position that liquidity can safely support.
 
-Use it to judge an asset as lending collateral (check_collateral_size), to size a trade (estimate_trade_depth), to screen assets (list_assets, compare_assets), and to look back at a ledger (get_asset_risk with ledger, get_risk_history).
+Use it to judge an asset as lending collateral (check_collateral_size), to audit a Blend lending pool's caps against Stellar liquidity (audit_blend_pool), to size a trade (estimate_trade_depth), to screen assets (list_assets, compare_assets), and to look back at a ledger (get_asset_risk with ledger, get_risk_history).
 
 Rules for answers built on these tools:
 - An asset is CODE:ISSUER, never a bare ticker. Resolve codes with find_asset and ask when several issuers match.
@@ -30,6 +32,10 @@ Rules for answers built on these tools:
 
 export interface KeelMcpOptions extends KeelApiOptions {
   api?: KeelApi;
+  /** Soroban RPC used to read Blend pools. Defaults to a public mainnet endpoint. */
+  sorobanRpcUrl?: string;
+  /** Injection point for tests: replaces the on-chain Blend audit. */
+  blendAudit?: BlendAuditRunner;
 }
 
 export function createKeelMcpServer(options: KeelMcpOptions = {}) {
@@ -48,6 +54,12 @@ export function createKeelMcpServer(options: KeelMcpOptions = {}) {
   registerHistory(server, api);
   registerCompare(server, api);
   registerMethodology(server, api);
+  registerBlendAudit(
+    server,
+    options.blendAudit ??
+      ((poolIds, { withOraclePrices }) =>
+        runBlendAudit(api, poolIds, { rpcUrl: options.sorobanRpcUrl, withOraclePrices })),
+  );
   registerResources(server, api, options.fetch);
   registerPrompts(server);
 
