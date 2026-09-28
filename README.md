@@ -138,6 +138,21 @@ the contract in [keel-backend](https://github.com/Keel-Official/keel-backend). R
 copied contract's version differs from `keel.contractVersion` in `package.json`, so drift is
 visible rather than silent.
 
+## Releasing
+
+Releases run in GitHub Actions (`.github/workflows/publish.yml`), which publishes the npm
+package with provenance and then publishes `server.json` to the MCP Registry through GitHub
+OIDC. The registry grants `io.github.Keel-Official/*` to workflows in this repository, so no
+personal login or OAuth approval is involved.
+
+1. Bump `version` in `package.json`, both `version` fields in `server.json`, and
+   `SERVER_VERSION` in `src/server.ts`. A test fails if they disagree.
+2. Commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+The workflow needs a repository secret `NPM_TOKEN` (granular token, publish access to
+`@keel-official`). Both publish steps skip a version that already exists, so a manual
+**Run workflow** is always safe to repeat.
+
 ## License
 
 MIT

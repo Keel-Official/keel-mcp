@@ -1,0 +1,116 @@
+# Publishes @keel-official/mcp to npm and io.github.Keel-Official/keel-mcp to the
+# MCP Registry.
+#
+# Why GitHub Actions and not a laptop: the registry grants io.github.<owner>/* to
+# the OIDC token of a workflow running in a repository owned by <owner>. That
+# needs no OAuth app approval from the Keel-Official org and no personal login.
+#
+# Triggers
+#   push a tag vX.Y.Z   the normal release: tag must equal package.json version
+#   Run workflow        manual rerun; publishes whatever is not published yet
+#
+# Both steps are idempotent: a version already on npm, or already in the
+# registry, is skipped rather than failing the run. That is what lets the manual
+# trigger finish 0.1.0, whose npm package was published by hand.
+#
+# Needs one repository secret: NPM_TOKEN, a granular npm access token with
+# read and write access to the @keel-official scope. It is only read when the
+# npm version does not exist yet.
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # MCP Registry OIDC login and npm provenance
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Read package identity
+        id: pkg
+        run: |
+          echo "name=$(jq -r .name package.json)" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+          echo "server=$(jq -r .name server.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Tag matches package.json
+        if: github.ref_type == 'tag'
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "v${{ steps.pkg.outputs.version }}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match package.json version ${{ steps.pkg.outputs.version }}"
+            exit 1
+          fi
+
+      - run: npm ci
+
+      # typecheck, 42 tests (including server.json == package.json), build
+      - run: npm run prepublishOnly
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NAME: ${{ steps.pkg.outputs.name }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION is already on npm, skipping."
+            exit 0
+          fi
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::secret NPM_TOKEN is not set, and $NAME@$VERSION is not on npm yet"
+            exit 1
+          fi
+          # prepublishOnly already ran above; --ignore-scripts avoids a second run.
+          npm publish --provenance --access public --ignore-scripts
+
+      - name: Install mcp-publisher
+        env:
+          MCP_PUBLISHER_VERSION: v1.8.1
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+          ./mcp-publisher --help >/dev/null
+
+      - name: Publish to the MCP Registry
+        env:
+          SERVER: ${{ steps.pkg.outputs.server }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          published=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=${SERVER}&version=${VERSION}" \
+            | jq -r --arg n "$SERVER" --arg v "$VERSION" \
+              '[.servers[]?.server | select(.name == $n and .version == $v)] | length')
+          if [ "$published" != "0" ]; then
+            echo "$SERVER $VERSION is already in the MCP Registry, skipping."
+            exit 0
+          fi
+          ./mcp-publisher validate
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published ${{ steps.pkg.outputs.name }}@${{ steps.pkg.outputs.version }}"
+            echo "- npm: https://www.npmjs.com/package/${{ steps.pkg.outputs.name }}"
+            echo "- MCP Registry: https://registry.modelcontextprotocol.io/v0/servers?search=${{ steps.pkg.outputs.server }}"
+          } >> "$GITHUB_STEP_SUMMARY"
