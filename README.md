@@ -1,5 +1,8 @@
 # keel-mcp
 
+[![npm](https://img.shields.io/npm/v/@keel-official/mcp)](https://www.npmjs.com/package/@keel-official/mcp)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.Keel--Official%2Fkeel--mcp-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=keel-mcp)
+
 A [Model Context Protocol](https://modelcontextprotocol.io) server for **Keel**, the liquidity
 risk engine for Stellar. It lets an AI agent (Claude Desktop, Claude Code, Cursor, or any MCP
 client) answer questions like these with Keel's own numbers:
@@ -22,7 +25,7 @@ Requires Node.js 20 or newer.
 **Claude Code**
 
 ```bash
-claude mcp add keel -- npx -y keel-mcp
+claude mcp add keel -- npx -y @keel-official/mcp
 ```
 
 **Claude Desktop** (`claude_desktop_config.json`) and **Cursor** (`.cursor/mcp.json`)
@@ -32,7 +35,7 @@ claude mcp add keel -- npx -y keel-mcp
   "mcpServers": {
     "keel": {
       "command": "npx",
-      "args": ["-y", "keel-mcp"]
+      "args": ["-y", "@keel-official/mcp"]
     }
   }
 }

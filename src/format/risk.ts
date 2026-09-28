@@ -13,8 +13,19 @@ export function deltaPct(delta: number): string {
  * set and a holder set measured as safe are different answers.
  */
 
-function withReason(value: string, note: string | null | undefined): string {
-  return note ? `${value} (not available: ${note})` : value;
+export function isReconstruction(risk: AssetRisk): boolean {
+  return risk.dataSource !== 'horizon' && risk.dataSource !== 'hubble';
+}
+
+/**
+ * The contract sends no supportingNotes on a reconstructed row: its reasons travel
+ * in `warnings`. A bare "n/a" there would read as an unexplained gap.
+ */
+const RECONSTRUCTED = 'not measured on a reconstructed row; see the engine warnings';
+
+function withReason(value: string, note: string | null | undefined, risk?: AssetRisk): string {
+  const reason = note ?? (risk && isReconstruction(risk) ? RECONSTRUCTED : null);
+  return reason ? `${value} (not available: ${reason})` : value;
 }
 
 export function pairLabel(risk: AssetRisk): string {
@@ -45,7 +56,7 @@ export function renderRisk(risk: AssetRisk): string {
   lines.push(`Executable depth in ${quote} (buy side / sell side, buy side split SDEX + AMM):`);
   for (const point of [...risk.depth].sort((a, b) => a.delta - b.delta)) {
     lines.push(
-      `  +/-${deltaPct(point.delta)}:${display(point.buySide)} / ${display(point.sellSide)}` +
+      `  +/-${deltaPct(point.delta)}: ${display(point.buySide)} / ${display(point.sellSide)}` +
         ` (SDEX ${display(point.fromSdex)} + AMM ${display(point.fromAmm)})`,
     );
   }
@@ -68,21 +79,21 @@ export function renderRisk(risk: AssetRisk): string {
   const holders =
     risk.holderTop1Pct != null
       ? `largest holder ${displayPct(risk.holderTop1Pct)}, top ten ${displayPct(risk.holderTop10Pct)}, HHI ${display(risk.holderHhi, 4)}`
-      : withReason('n/a', notes?.holders);
+      : withReason('n/a', notes?.holders, risk);
   lines.push(`Holders: ${holders}.`);
 
   const v2s = risk.volumeToSupply
     ? `1d ${display(risk.volumeToSupply.d1, 6)}, 7d ${display(risk.volumeToSupply.d7, 6)}, 30d ${display(risk.volumeToSupply.d30, 6)}`
-    : withReason('n/a', notes?.volumeToSupply);
+    : withReason('n/a', notes?.volumeToSupply, risk);
   lines.push(`Volume to supply: ${v2s}.`);
 
   const excluded =
-    risk.tradesExcludedPct != null ? displayPct(risk.tradesExcludedPct) : withReason('n/a', notes?.tradesExcludedPct);
+    risk.tradesExcludedPct != null ? displayPct(risk.tradesExcludedPct) : withReason('n/a', notes?.tradesExcludedPct, risk);
   lines.push(`30 day volume excluded as non-genuine: ${excluded}.`);
 
   const lastTrade = risk.lastGenuineTrade
     ? `${risk.lastGenuineTrade.at} (ledger ${risk.lastGenuineTrade.ledgerSeq})`
-    : withReason('none found', notes?.lastGenuineTrade);
+    : withReason('none found', notes?.lastGenuineTrade, risk);
   lines.push(`Last genuine trade: ${lastTrade}.`);
 
   if (risk.warnings.length) {

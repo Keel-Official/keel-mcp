@@ -27,6 +27,17 @@ describe('static guarantees', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('server.json matches package.json, which the MCP Registry checks on publish', () => {
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+    const server = JSON.parse(readFileSync(join(root, 'server.json'), 'utf8'));
+    const src = readFileSync(join(root, 'src/server.ts'), 'utf8');
+    expect(server.name).toBe(pkg.mcpName);
+    expect(server.version).toBe(pkg.version);
+    expect(server.packages[0].identifier).toBe(pkg.name);
+    expect(server.packages[0].version).toBe(pkg.version);
+    expect(src).toContain(`SERVER_VERSION = '${pkg.version}'`);
+  });
+
   it('the copied contract is the version package.json records', () => {
     const yaml = readFileSync(join(root, 'openapi/keel-openapi.yaml'), 'utf8');
     const version = yaml.match(/^ {2}version:\s*['"]?([^'"\s]+)/m)?.[1];

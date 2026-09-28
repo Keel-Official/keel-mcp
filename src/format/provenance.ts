@@ -58,7 +58,11 @@ export function provenanceLine(block: ProvenanceBlock): string {
     block.ledgerClosedAt ? `closed ${block.ledgerClosedAt}` : null,
     block.dataSource ? `source ${block.dataSource}` : null,
     `methodology ${block.methodologyVersion ?? 'unknown'}`,
-    age(block.stalenessSeconds),
+    // Staleness measures a live reading against the tip. On a historical row it
+    // is meaningless (the API sends 0 for a February ledger), so it is not shown.
+    block.dataSource === null || block.dataSource === 'horizon'
+      ? age(block.stalenessSeconds)
+      : 'a historical row, not a live reading',
   ].filter(Boolean);
   return `Provenance: ${parts.join(', ')}. Verify at ${block.apiUrl}.`;
 }

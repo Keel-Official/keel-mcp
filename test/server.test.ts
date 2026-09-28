@@ -49,6 +49,17 @@ function route(url: URL) {
     if (url.searchParams.get('ledger') === '61147341') {
       return { status: 404, body: { error: { code: 'LEDGER_NOT_AVAILABLE', message: 'Ledger 61147341 is not available.' } } };
     }
+    if (url.searchParams.get('ledger') === '61340263' && asset === USTRY) {
+      // Shaped like the live reconstruction: no supportingNotes, reasons in warnings.
+      return {
+        status: 200,
+        body: {
+          ...ustry, ledgerSeq: 61340263, dataSource: 'offers-implied', supportingNotes: null,
+          holderTop1Pct: null, holderTop10Pct: null, holderHhi: null,
+        },
+        headers: { 'x-keel-staleness-seconds': '0' },
+      };
+    }
     if (asset === USTRY) return { status: 200, body: ustry };
     if (asset === 'XLM') return { status: 200, body: xlm };
   }
@@ -114,6 +125,14 @@ describe('keel-mcp server', () => {
   it('get_asset_risk carries the reason for an absent figure instead of a zero', async () => {
     const { text } = await call('get_asset_risk', { assetId: 'xlm' });
     expect(text).toContain('native asset and has no trustlines');
+  });
+
+  it('get_asset_risk explains absent figures on a reconstruction and drops the live age', async () => {
+    const { text } = await call('get_asset_risk', { assetId: USTRY, ledger: 61340263 });
+    expect(text).toContain('+/-2%: ');
+    expect(text).toContain('Holders: n/a (not available: not measured on a reconstructed row');
+    expect(text).toContain('a historical row, not a live reading');
+    expect(text).not.toContain('behind the latest ledger');
   });
 
   it('get_asset_risk turns an unreconstructed ledger into a clear error', async () => {

@@ -22,7 +22,7 @@ type Route = (url: URL) => { status: number; body: unknown; headers?: Record<str
 /** A fetch that answers from a routing function and records every call. */
 export function fakeFetch(route: Route) {
   const calls: { method: string; url: string }[] = [];
-  const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(String(input), init);
     calls.push({ method: request.method, url: request.url });
     const url = new URL(request.url);

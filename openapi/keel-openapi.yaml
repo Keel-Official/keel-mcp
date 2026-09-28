@@ -1,0 +1,2525 @@
+openapi: 3.1.0
+
+info:
+  title: Keel Liquidity Risk API
+  # 1.6.1, 16 September 2026. FIVE CORRECTIONS AND NO SCHEMA CHANGE, which is why it
+  # is a patch, on the same reasoning 1.5.1 used. Every one is a place where the
+  # server moved and this file did not. The pass that found them compared this file
+  # against the RESPONSE rather than against the handler: GET /v1/methodology was
+  # called on a test server and its JSON diffed against the example below. Reading
+  # the handler would have found the first and missed the other four.
+  #
+  #  1. manipulationRatioLowPct read '1.0' and the server sends '0.1'. DEC-017
+  #     section 1 item 3 set that value on 10 September 2026 and internal/domain
+  #     applied it on the 12th. The old number was never in force: the rule could
+  #     not be implemented as written until that record fixed its units, so no
+  #     result was ever judged against 1.0 and this is a correction rather than a
+  #     recalibration. It is the only one of the five a consumer could have ACTED
+  #     on, because it is the only one that is a wrong value rather than a wrong
+  #     rendering or a missing key.
+  #  2. Eight threshold values were shown with trailing zeros the server does not
+  #     send. handleMethodology renders them with decimal.String(), so what arrives
+  #     is '10000' and not '10000.0000000', '20' and not '20.0'. The Decimal
+  #     pattern accepts both spellings, so nothing here was ever INVALID; it was
+  #     simply not what a consumer receives, and the mock repeated it.
+  #  3. ammFeeBp: 30 is removed. It appears in no Go file in this repository, so
+  #     the example and the generated mock were advertising a threshold this API
+  #     has never sent. That is exactly the failure DEC-014 section 5 records, and
+  #     this time it was sitting in the mock a frontend builds against.
+  #  4. Four keys the server does send were missing entirely: liquidationDelta,
+  #     liquidationHaircut, manipulationCriticalDelta and manipulationMargin. The
+  #     maxSafeCollateral descriptions have named "the liquidation delta", "the
+  #     haircut", "the critical delta" and "the safety margin" in prose since 1.2.0
+  #     without ever saying they are readable, so a consumer could see the terms
+  #     and not the numbers behind them. Two of the four arrive as JSON NUMBERS
+  #     rather than strings; point 1 of the description below allows that only for
+  #     deltas, and both are deltas, which is now stated in the schema instead of
+  #     left for a consumer to discover from a response.
+  #  5. The DataSource description of offers-implied said the book is rebuilt by
+  #     replaying manage_sell_offer and manage_buy_offer. It also folds the trades
+  #     that consumed those offers, and since DEC-021 a run may additionally be
+  #     told of an offer that left the book without emitting either kind of event.
+  #     docs/methodology/01-data-sources.md section 1.4 carries the rule. No enum
+  #     value and no field moved: what changed is what offers-implied CLAIMS ABOUT
+  #     ITSELF, which is the wording DEC-021 section header uses for its own scope.
+  #
+  # WHAT THIS PASS DID NOT TOUCH, and it is the larger of the two version problems.
+  # The example's `version: 1.0.8-draft` is CORRECT, because domain.MethodologyVersion
+  # is still 1.0.8-draft. The methodology is not: 00-overview.md and the methodology
+  # README say 1.1.0-draft, while 01-data-sources.md and 11-limitations.md say 1.2.0
+  # after DEC-021. So DEC-014's one-version rule is not holding right now, and the
+  # constant is behind whichever version wins. Which version is in force is Al's to
+  # settle and docs/methodology/ is RED, so this file follows the server and says so
+  # here rather than guessing a string and making the contract lie in a new way.
+  #
+  # The 1.6.0 entry below was filed underneath 1.4.1 rather than at the head of this
+  # block. It is moved, not rewritten, because this block is read as a changelog and
+  # a changelog whose newest entry is buried in the middle is one a reader stops
+  # trusting. Not one word of it changed.
+  #
+  # 1.6.0, 12 September 2026: GET /health gains buildRevision. A MINOR bump and
+  # not a patch, because a consumer gains a field it did not have; additive, so
+  # nothing that reads 1.5.1 breaks. It exists because on that day this API
+  # served a binary seventeen commits behind main while every other field on
+  # /health read correctly, and establishing that took a tag listing rather than
+  # a request. An endpoint that reports its own liveness and cannot say which
+  # build is answering leaves the one question an operator actually has.
+  #
+  # 1.5.1, 11 September 2026. TWO CORRECTIONS AND NO SCHEMA CHANGE, which is why it
+  # is a patch. Both are places where this file described a rule that DEC-015 had
+  # already replaced on 5 September, so the contract was six days out of date with
+  # the methodology it is supposed to express.
+  #
+  #  1. The `quote` parameter said the primary pair is "the pair with the largest
+  #     combined depth at 10 percent". No such rule was ever adopted, and it is a
+  #     bad one: a band would move because depth moved rather than because risk
+  #     did. docs/methodology/02-pair-selection.md section 2 says "The primary
+  #     pair is USDC, always". The server implements that as of the same day; it
+  #     used to answer INVALID_ASSET_ID for a multi-pair asset with no quote.
+  #  2. The methodology example carried manipulationCheapUnit: XLM and
+  #     thinDepth5PctUnit: XLM. Both are USDC, and were wrong even for XLM pairs,
+  #     because section 1 of that document converts an XLM-denominated depth to
+  #     USDC before judging it. The server omitted both keys entirely rather than
+  #     serve a wrong unit, and now serves them as the (code, issuer) identity.
+  #
+  # The thresholds map is open ended by design, so adding keys to it is not a
+  # schema change and needs no minor bump. This is a patch because the only things
+  # that moved are a parameter DESCRIPTION and an EXAMPLE.
+  #
+  # 1.5.0, 5 September 2026. Four ADDITIVE fields on AssetRisk carrying the pair
+  # decision: primaryQuote, pairsEvaluated, bandDrivenBy and xlmUsdcRate, plus the
+  # PairSummary schema the third of those needs. Minor and not patch, because the
+  # schema gains members. Not breaking: all four are OPTIONAL and no existing field,
+  # example or enum moved.
+  #
+  # WHY OPTIONAL RATHER THAN REQUIRED, which is the only judgement call in this pass.
+  # The three fields 1.2.0 added were made required because the server already produced
+  # them. Nothing produces these four yet: internal/domain.AssetRisk declares them in
+  # the same commit, and internal/domain/compute.go may not populate them until the
+  # expected values exist in the golden fixture, which is the ordering rule DEC-008 put
+  # in place of the red zone lock. A required field the server does not send is a
+  # contract that lies, and DEC-014 section 5 records what that costs here: the
+  # /methodology example once advertised a version the server did not return, and the
+  # generated mock served it.
+  #
+  # FOR THE SAME REASON NO EXAMPLE CHANGED, so docs/api/mocks/ is byte-identical after
+  # this pass. Filling primaryQuote in an example would promise the frontend a field no
+  # response carries; filling pairsEvaluated or xlmUsdcRate would mean inventing a band
+  # and a rate, and DEC-003 section 4 already refused exactly that reasoning for the
+  # numbers it left blank. The examples move when the computation does.
+  #
+  # THE FRONTEND BUILDER HAS TO BE TOLD, in the same message as the section 6 questions
+  # and the 1.3.0 manipulationCost rename. Under 1.5.0 an asset's band may be set by a
+  # pair other than the one whose depth is displayed beside it, and a display that shows
+  # band and depth as one reading is wrong in that case. bandDrivenBy and the
+  # SECONDARY_PAIR_WORSE warning are how that case is detected. DEC-003 section 11.
+  #
+  # Source: docs/methodology/02-pair-selection.md section 2, table "Changes this
+  # decision requires". DEC-015.
+  #
+  # 1.4.6, 5 September 2026. Every methodologyVersion example moves from 1.0.3-draft to
+  # 1.0.8-draft, and the /methodology example's version with them. No schema change and
+  # no behaviour change: the server stamps internal/domain.MethodologyVersion on every
+  # response and that constant moved the same day, so this file was about to be handing
+  # the frontend a version string this API no longer sends. That exact failure is
+  # recorded in 1.4.1 below, where the example carried 1.0.2-draft while the server
+  # returned 1.0.3-draft, and docs/api/mocks/ is generated from these examples so the
+  # mock inherits it.
+  #
+  # WHY THE CONSTANT MOVED, in one line: 07-supporting-metrics.md had run to 1.0.8-draft
+  # while the other ten methodology files and the code still read 1.0.3-draft, and Al
+  # ratified one version in force for the whole set. No definition changed. DEC-014 and
+  # docs/methodology/README.md section 4.
+  #
+  # NOT BREAKING, and the reason is in the contract already: methodologyVersion is
+  # documented as a value to read rather than to pin, and a consumer that hardcoded
+  # 1.0.3-draft was already going to break at the next methodology change. Rows stored
+  # at 1.0.3-draft keep their label, so a historical response can still carry it.
+  #
+  # 1.4.5, 2 September 2026. The oracle window in every example moves from 300 seconds
+  # to 900, so the contract stops disagreeing with the methodology about it. No schema
+  # change. BREAKING FOR ANY CONSUMER that hardcoded 300 rather than reading
+  # oracleWindowSeconds from GET /methodology, which is why the field is served at all.
+  # docs/methodology/06-oracle-resilience.md section 1 states a 15 minute default and
+  # has since 1.0.3; the contract carried 5 minutes in one /methodology example, one
+  # schema example, three oracleResistance examples and two prose sentences, and
+  # docs/api/mocks/methodology.json is generated from the first of those, so a frontend
+  # was building against a window this API's own methodology does not use. Finding
+  # P2-17 in scripts/audit-verification.sh.
+  #
+  # THIS DOES NOT DECIDE THE WINDOW. 06-oracle-resilience.md calls 15 minutes an
+  # assumption in as many words, it is marked partial for that reason, and handoff item
+  # B-6 is open against Reflector for the real figure. The contract follows the
+  # methodology here rather than leading it, and if B-6 comes back with a third number
+  # both move together. What is fixed is the disagreement, not the value.
+  #
+  # 1.4.4, 28 August 2026. `reachable` on manipulationCostCombined is documented as
+  # unconditionally true whenever an active pool is present, and the four-row
+  # interpretation table is scoped to manipulationCostOrderbookOnly. Description only:
+  # no schema change, no example change, no breaking change. The behaviour is not new.
+  # internal/domain.ComputeManipulationCost has set it unconditionally since the
+  # combined variant existed, types.go and compute.go both state it, and
+  # TestAnActivePoolMakesEveryTargetReachable locks it; the contract was the only place
+  # that did not say so, and a reader could reasonably take a field that is always true
+  # for a check that had been performed. This is the same presence rule 1.4.3 applied to
+  # maxReachablePrice, written from the other side. DEC-007.
+  #
+  # 1.4.3, 28 August 2026. maxReachablePrice is null when a pool is PRESENT, not only
+  # when it is the sole venue. No schema change; the description and one example
+  # changed, and the example change is BREAKING FOR ANY CONSUMER that read
+  # AssetHealthy as showing a non-null maxReachablePrice on a market with both venues.
+  # It never should have. docs/methodology/05-manipulation-cost.md section 5 has keyed
+  # this on presence since 1.0.3 and internal/domain.maxReachable implements presence,
+  # so the contract was the only place carrying the other rule, and its AssetHealthy
+  # example was built on it: a non-null maxReachablePrice, a combined delta 100 rung
+  # marked unreachable, and a warning explaining the unreachability. All three were the
+  # old reading and all three are corrected together. The warning now carries the text
+  # internal/domain emits verbatim. Finding P2-16 in scripts/audit-verification.sh.
+  #
+  # 1.4.2, 27 August 2026. priceDivergencePct added to the /methodology example. No
+  # schema change and no breaking change: the Thresholds schema has declared the key
+  # since methodology 1.0.3, and `thresholds` is documented as open ended with
+  # consumers reading it by key name. The example was the one place it was missing, so
+  # docs/api/mocks/methodology.json never showed a consumer the threshold that decides
+  # priceSource. The value is the default in 09-flags-and-bands.md section 6 and is not
+  # a choice made here.
+  #
+  # 1.4.1, 26 August 2026. Two example values corrected, no schema change and no
+  # breaking change. The Blend incident is February 2026 and not May: DEC-001
+  # section 1 records it as a correction to the SOW, every other detail of the SOW
+  # matches February, and the date had simply been written down wrongly. And the
+  # methodology example carried 1.0.2-draft while the server returns 1.0.8-draft,
+  # so the generated mock was handing the frontend a version string this API has
+  # never sent.
+  #
+  # 1.7.0, 17 September 2026. ONE ADDITIVE FIELD, WHICH IS WHY IT IS A MINOR AND
+  # NOT A PATCH. `AssetRisk.reconstruction` appears on a response whose
+  # `dataSource` is a reconstruction and is OMITTED on every other, so no existing
+  # consumer reads a changed value and nothing that validated against 1.6.1 stops
+  # validating. It is a minor rather than a patch because a new key is a new
+  # capability: DEC-022 chose a machine-readable field over prose alone so that a
+  # consumer can BRANCH on the gaps in a reconstructed book instead of reading
+  # them out of `warnings`.
+  #
+  # THE BEHAVIOUR A CONSUMER HAS TO BE TOLD, and it is not "a field was added".
+  # Until now every stored row was a direct reading of a live book. A row may now
+  # be a RECONSTRUCTION whose walk is known to have missed offers, and such a row
+  # is too THIN rather than too deep, so its depth is a lower bound and its risk an
+  # upper bound. A page that renders it identically to a live reading is wrong in
+  # the way DEC-003 section 1 describes: nothing fails, the number still draws,
+  # only its meaning is different. This joins freeze condition 4's message for the
+  # frontend builder for exactly that reason.
+  #
+  # 1.7.1, 22 September 2026. ONE DESCRIPTION CORRECTED AND NO SCHEMA CHANGE, which
+  # is why it is a patch. `AssetRisk.oracleResistance` said it was null only when
+  # there is no executable price. Until this release it was null on EVERY row,
+  # priced or not, because nothing in the engine assembled the object; the frontend
+  # found that the description was false for sixty-one live assets. The engine now
+  # assembles it, and it is still null in one more case that the old sentence did
+  # not admit: when the genuine volume inside the oracle window was not measured at
+  # the row's own ledger. The daily trade cache sums that window back from
+  # midnight, and pairing it with a manipulation cost measured at another instant
+  # would put two moments up to a day apart into one reading, so the engine refuses
+  # the pairing and says so in `warnings`. No field, type or enum moved.
+  #
+  # 1.8.0, 23 September 2026. TWO OPTIONAL PARAMETERS WHERE ONE WAS REQUIRED,
+  # WHICH IS A MINOR AND NOT A PATCH. `from` and `to` on GET
+  # /asset/{id}/history may now both be omitted, and a new `limit` bounds the
+  # rows one response carries. Nothing that sends a window behaves differently,
+  # and no field, type or enum moved, so every consumer validating against 1.7.1
+  # keeps working; what is new is a request that was previously refused.
+  #
+  # WHY IT EXISTS. A stored reconstruction is unreachable through a window. The
+  # three offers-implied rows the replay stored sit in February 2026, the tip is
+  # about 3.2 million ledgers later, and one request is capped at 90 days, so the
+  # dashboard's source selector answered empty for that source no matter which
+  # window a reader picked. Without a window the endpoint answers the question
+  # that reaches them, "which readings do you hold", and reports the range that
+  # came back in `from` and `to`.
+  #
+  # ONE BOUND ALONE IS STILL 400. It is neither question, and guessing the other
+  # end would be the API deciding what a consumer meant.
+  #
+  # 1.9.0, 25 September 2026. ONE ADDITIVE FIELD, WHICH IS WHY IT IS A MINOR AND
+  # NOT A PATCH. `AssetRisk.supportingNotes` says why each null supporting figure
+  # is null. No existing field changed value or type, so every consumer validating
+  # against 1.8.0 keeps working.
+  #
+  # WHY IT EXISTS. On 25 September 2026 the live API carried holder concentration
+  # for 35 of 61 assets, volume-to-supply for 26 and a last genuine trade for 30,
+  # and the dashboard showed every other one as the same dash. The engine knew
+  # which of four causes applied to each and wrote it only to the scan log, so a
+  # reader could not tell a truncated holder set from a thirty day search that
+  # found nothing, and only the second is a measurement.
+  #
+  # THE FIELD FILLS FROM THE NEXT SCAN. Rows stored before migration 0011 have no
+  # reasons and send null, which is the same null a row with nothing to explain
+  # sends; the figures beside it say which.
+  version: 1.9.0
+  description: |
+    A read-only API for the liquidity risk metrics of Stellar assets.
+
+    Keel measures the effective liquidity depth of an asset from the SDEX
+    orderbook and AMM pool reserves, then derives the cost of manipulating its
+    price and a recommendation for the maximum safe collateral size.
+
+    ## What to know before using this API
+
+    **1. Every numeric value is sent as a string, not a number.**
+    Stellar amounts are int64 stroops with 7 decimals. A JSON number is an IEEE
+    754 double and will lose precision. Consumers must use a decimal library
+    (decimal.js, big.js) and must not do arithmetic with parseFloat. The only
+    numeric fields sent as numbers are `delta` (0.02, 0.05, 0.10) and whole
+    counts such as `ledgerSeq`.
+
+    **2. The metrics always lag slightly.** The API reads results that were
+    already computed; it does not compute them when the request arrives. The
+    `X-Keel-Staleness-Seconds` header states by how much. The target maximum is
+    900 seconds.
+
+    **3. An asset with no price is not an error.** An asset with no orderbook and
+    no pool returns HTTP 200 with `priceSource: "none"` and band `CRITICAL`. That
+    is a high-value finding, not a failure. Do not display it as an error.
+
+    **4. There is no SLA.** This is a proof of concept funded by Instawards. Do
+    not use it as the sole basis for a financial decision.
+
+    **5. Keel is permanently read-only.** No endpoint writes anything to the
+    Stellar network. There is no authentication because there is no user data.
+
+    **6. A broken book is not an error, and it is not a normal condition either.**
+    An asset can have an orderbook with a spread of hundreds of percent. When that
+    happens, `midPrice` is still sent but is meaningless, `spreadPct` is large, and
+    the `SPREAD_EXTREME` flag fires. The metrics derived from `midPrice`, including
+    the 2/5/10 percent depth ladder, lose their meaning with it. The display for
+    this state has to be designed separately from a healthy asset and separately
+    from an asset with no price. See the `assetBrokenBook` example response.
+
+    **7. `cost` inside `manipulationCost` must never be read on its own.** Always
+    read it together with `reachable`, and read both from
+    `manipulationCostOrderbookOnly`. A zero cost with `reachable: true` means the
+    target price is free. A zero cost with `reachable: false` means there is no
+    liquidity at all in that range, so the price cannot be walked up to it. Two
+    states with opposite meanings. On `manipulationCostCombined`, `reachable` is
+    unconditionally true whenever the pair has an active pool, so that
+    distinction cannot be drawn there at all.
+
+  contact:
+    name: Ciganytry
+    email: radenistri@gmail.com
+  license:
+    name: MIT
+    identifier: MIT
+
+# No authentication, stated explicitly rather than by omission. An empty security
+# array is the OpenAPI way of saying "no scheme is required"; leaving the field out
+# entirely is ambiguous, and a client generator cannot tell it apart from an
+# oversight.
+security: []
+
+servers:
+  - url: https://api.keel.example/v1
+    description: Production (no SLA)
+  - url: http://localhost:3000/v1
+    description: Local
+
+tags:
+  - name: assets
+    description: Per-asset risk metrics
+  - name: meta
+    description: Service health and methodology version
+
+paths:
+
+  /health:
+    get:
+      tags: [meta]
+      summary: Service status
+      operationId: getHealth
+      responses:
+        '200':
+          description: The service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: ok
+                latestScanAt: '2026-08-19T04:15:00Z'
+                latestScanLedgerSeq: 61234567
+                assetsMonitored: 53
+                methodologyVersion: 1.0.8-draft
+                historicalAvailable: true
+                buildRevision: 9f8c2a1d4b7e6053c1a2f8d9e0b3c7a6d5e4f312
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /methodology:
+    get:
+      tags: [meta]
+      summary: The active methodology version and thresholds
+      description: |
+        Returns the active methodology version together with every threshold value
+        used to evaluate the flags. These thresholds are chosen, not calibrated
+        against a set of incidents. Consumers are encouraged to apply their own
+        thresholds by reading the individual flags.
+      operationId: getMethodology
+      responses:
+        '200':
+          description: The active methodology
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Methodology'
+              example:
+                version: 1.0.8-draft
+                documentUrl: https://github.com/Keel-Official/keel-backend/blob/main/docs/methodology/00-overview.md
+                calibrated: false
+                calibrationNote: >-
+                  The thresholds were chosen based on the magnitude of the Blend
+                  incident of February 2026 and on conservative judgement, not
+                  calibrated against a set of incidents. Every flag is reported
+                  separately so that consumers can apply their own thresholds.
+                thresholds:
+                  manipulationCheapAbsolute: '10000'
+                  manipulationCheapUnit: USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                  manipulationRatioLowPct: '0.1'
+                  thinDepth5PctAbsolute: '50000'
+                  thinDepth5PctUnit: USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                  holderTop1ExtremePct: '50'
+                  holderTop10HighPct: '80'
+                  genuineTradeStaleDays: 30
+                  genuineTradeWarnDays: 7
+                  washTradeSuspectedPct: '50'
+                  spreadExtremePct: '20'
+                  priceDivergencePct: '10'
+                  oracleWindowSeconds: 900
+                  liquidationDelta: 0.1
+                  liquidationHaircut: '0.5'
+                  manipulationCriticalDelta: 0.5
+                  manipulationMargin: '0.25'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /assets:
+    get:
+      tags: [assets]
+      summary: List the monitored assets
+      operationId: listAssets
+      parameters:
+        - $ref: '#/components/parameters/Band'
+        - $ref: '#/components/parameters/HasFlag'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The asset list
+          headers:
+            X-Keel-Staleness-Seconds:
+              $ref: '#/components/headers/Staleness'
+            X-Keel-Methodology-Version:
+              $ref: '#/components/headers/MethodologyVersion'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetListResponse'
+              examples:
+                campuran:
+                  $ref: '#/components/examples/AssetListMixed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /asset/{assetId}/depth:
+    get:
+      tags: [assets]
+      summary: Current risk metrics, or metrics at a historical ledger
+      description: |
+        Without the `ledger` parameter, this returns the most recent scan from
+        Horizon. With the `ledger` parameter, it returns a historical replay from
+        Hubble.
+
+        The historical path is batch based and does not guarantee availability for
+        an arbitrary ledger. If the requested ledger is not available yet, the
+        response is a 404 with code `LEDGER_NOT_AVAILABLE`, not a 500.
+      operationId: getAssetDepth
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/Quote'
+        - $ref: '#/components/parameters/Ledger'
+      responses:
+        '200':
+          description: |
+            The risk metrics. Note that an asset with no executable price also
+            returns 200, with `priceSource: "none"` and band `CRITICAL`.
+          headers:
+            X-Keel-Staleness-Seconds:
+              $ref: '#/components/headers/Staleness'
+            X-Keel-Methodology-Version:
+              $ref: '#/components/headers/MethodologyVersion'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetRisk'
+              examples:
+                asetSehat:
+                  $ref: '#/components/examples/AssetHealthy'
+                hanyaPool:
+                  $ref: '#/components/examples/AssetPoolOnly'
+                tanpaHarga:
+                  $ref: '#/components/examples/AssetNoPrice'
+                bukuRusak:
+                  $ref: '#/components/examples/AssetBrokenBook'
+                replayHistoris:
+                  $ref: '#/components/examples/AssetHistorical'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/HistoricalUnavailable'
+
+  /asset/{assetId}/history:
+    get:
+      tags: [assets]
+      summary: A time series of metrics over a ledger range
+      description: |
+        Used by the dashboard for trend curves and by the Blend case study page.
+
+        TWO QUESTIONS, AND THE PARAMETERS SAY WHICH ONE IS ASKED. With `from` and
+        `to` this answers "what happened between these two ledgers", capped at 90
+        days per request, and the points are downsampled into `resolution`
+        buckets. With BOTH omitted it answers "which readings do you hold for
+        this source", returns them all without bucketing, and reports the range
+        that came back in `from` and `to`. One bound without the other is 400
+        INVALID_RANGE, because it is neither question.
+
+        THE SECOND FORM IS THE ONLY WAY TO REACH A RECONSTRUCTION. Stored
+        `offers-implied` rows sit where the replay ran, which today is February
+        2026, about 3.2 million ledgers behind the tip. No window inside the 90
+        day cap contains them, so every windowed request for that source comes
+        back empty and says nothing about whether anything is stored.
+
+        ONE SERIES IS ONE DATA SOURCE. A result is keyed by asset, ledger,
+        methodology version and data source, so a single ledger can hold several
+        results that are not comparable with each other: `horizon` and `hubble`
+        are direct readings, while `offers-implied` and `trades-implied` are
+        reconstructions, and `trades-implied` proves only liquidity that was
+        CONSUMED and is therefore a lower bound. This endpoint returns exactly one
+        source per response and names it in `dataSource`. It defaults to
+        `horizon`; ask for another by name with `source`.
+      operationId: getAssetHistory
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/Quote'
+        - name: from
+          in: query
+          description: |
+            The starting ledger sequence, inclusive. Required WITH `to`, or omit
+            both for the most recent stored readings of this source.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 60890000
+        - name: to
+          in: query
+          description: |
+            The ending ledger sequence, inclusive. Required WITH `from`, or omit
+            both for the most recent stored readings of this source.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 60950000
+        - name: limit
+          in: query
+          description: |
+            The most rows one response may carry. Without a window this bounds
+            how far back the stored readings are taken from, newest first, and
+            they are still returned oldest first.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            default: 2000
+        - name: resolution
+          in: query
+          description: |
+            The aggregation interval between data points. Applied only to a
+            windowed request: without a window there is no range to divide into
+            buckets, and bucketing anyway would collapse the three stored
+            February reconstructions, which close inside one hour and read from
+            LOW to CRITICAL, into a single point.
+          schema:
+            type: string
+            enum: [hour, day]
+            default: day
+        - name: source
+          in: query
+          description: |
+            Which data source the series is drawn from. One source per response,
+            never a mixture. `horizon` and `hubble` are direct readings;
+            `offers-implied` is reconstructed from posted offers and the trades
+            that consumed them, and `trades-implied` from executed trades alone,
+            which makes the last one a lower bound rather than a measurement. The
+            DataSource schema carries what the `offers-implied` fold cannot see by
+            itself. A value outside this set is 400 INVALID_RANGE and not an empty
+            series, because "no data" and "no such source" are different answers.
+          schema:
+            type: string
+            enum: [horizon, hubble, offers-implied, trades-implied]
+            default: horizon
+      responses:
+        '200':
+          description: The time series
+          headers:
+            X-Keel-Methodology-Version:
+              $ref: '#/components/headers/MethodologyVersion'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryResponse'
+              examples:
+                deretUstry:
+                  $ref: '#/components/examples/HistoryUstry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/HistoricalUnavailable'
+
+components:
+
+  parameters:
+
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      description: |
+        The asset identity. The format is `CODE:ISSUER` for an issued asset, or
+        `XLM` for the native asset. The colon does not need encoding, but a
+        consumer using a strict URL builder may encode it as `%3A`.
+      schema:
+        type: string
+        pattern: '^(XLM|[A-Za-z0-9]{1,12}(:|%3A)G[A-Z2-7]{55})$'
+      examples:
+        terbitan:
+          value: USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+        native:
+          value: XLM
+
+    Quote:
+      name: quote
+      in: query
+      description: |
+        The quote asset used as the unit of measurement. If omitted, the asset's
+        PRIMARY pair is used, and the primary pair is always
+        USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN. That is
+        `docs/methodology/02-pair-selection.md` section 2, and it follows from
+        section 1: the candidate quote set is exactly USDC and native XLM, and
+        every threshold is a USDC figure.
+
+        It is a fixed identity and not a measurement, so the pair this resolves to
+        does not change when depth changes. Until contract 1.5.1 this parameter
+        described the primary pair as the one with the largest combined depth at
+        10 percent; no such rule was ever adopted and DEC-015 replaced it.
+
+        An asset measured against several quotes with no USDC pair among them
+        cannot resolve without this parameter and answers 400 INVALID_ASSET_ID
+        listing its `quoteCandidates` and the `primaryQuote` it was looking for.
+      schema:
+        type: string
+        pattern: '^(XLM|[A-Za-z0-9]{1,12}(:|%3A)G[A-Z2-7]{55})$'
+      example: XLM
+
+    Ledger:
+      name: ledger
+      in: query
+      description: |
+        The ledger sequence for a historical replay. When set, `dataSource` in the
+        response will be `hubble`.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 60912345
+
+    Band:
+      name: band
+      in: query
+      description: Filter by risk band
+      schema:
+        type: string
+        enum: [LOW, MEDIUM, HIGH, CRITICAL]
+
+    HasFlag:
+      name: hasFlag
+      in: query
+      description: Filter for assets that trigger a specific flag
+      schema:
+        $ref: '#/components/schemas/Flag'
+
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+  headers:
+
+    Staleness:
+      description: |
+        How many seconds behind the latest ledger this data was when it was
+        computed. For a historical response the value is 0, because historical
+        data does not go stale.
+      schema:
+        type: integer
+      example: 412
+
+    MethodologyVersion:
+      description: The methodology version that produced the numbers in this response
+      schema:
+        type: string
+      example: 1.0.0
+
+  schemas:
+
+    Decimal:
+      type: string
+      description: |
+        A high precision decimal value as a string. DO NOT parseFloat. Use a
+        decimal library for any arithmetic.
+      pattern: '^-?[0-9]+(\.[0-9]+)?$'
+      example: '124533.4821900'
+
+    AssetType:
+      type: string
+      description: |
+        The asset type per the Stellar XDR, sent explicitly by Keel.
+
+        Consumers MUST NOT infer the type from the length of `code`. A code of
+        four characters or fewer can be issued as `credit_alphanum12`, and Horizon
+        reports it as issued. Guessing from code length produces an asset identity
+        different from the asset that was actually measured.
+      enum: [native, credit_alphanum4, credit_alphanum12]
+      example: credit_alphanum4
+
+    Asset:
+      type: object
+      required: [code, type, issuer]
+      properties:
+        code:
+          type: string
+          example: USDC
+        type: { $ref: '#/components/schemas/AssetType' }
+        issuer:
+          type: [string, 'null']
+          description: |
+            Null if and only if `type` is `native`. For both credit types the
+            issuer is always present.
+          example: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+
+    DataSource:
+      type: string
+      description: |
+        The origin of the data used to compute this response.
+
+        `horizon` a live scan of the current orderbook and pools.
+        `hubble` a replay of historical state from a snapshot.
+        `offers-implied` the orderbook state at that ledger was unavailable, so the
+        book was reconstructed by folding two event streams forward to it: the offer
+        operations (`manage_sell_offer`, `manage_buy_offer` and
+        `create_passive_sell_offer`) and the trades that consumed them. This is a
+        reconstruction and it carries `warnings`, but it is a STRONGER source than
+        `trades-implied`, because an offer proves liquidity that was POSTED.
+
+        An offer can also leave the book WITHOUT emitting either kind of event, and
+        the fold cannot see that on its own. Where this repository has proven a
+        specific offer absent, the removal is declared in
+        `configs/known-removals.json` and a run may be told of it by hand; DEC-021
+        records the case that established this, and
+        `docs/methodology/01-data-sources.md` section 1.4 carries the rule. The
+        correction is opt in per run and can only remove depth, never add it. This
+        field does not say whether a given result used one, and it is not being
+        widened to: the provenance sidecar beside the artefact names the removals
+        file and lists every declared removal.
+
+        `trades-implied` the orderbook state was unavailable and no offer history
+        was usable either, so price and liquidity were reconstructed from trades
+        that actually executed. Every depth figure it produces is a lower bound
+        rather than a measurement: a trade proves only the liquidity that was
+        CONSUMED, not the liquidity that was available. Do not display a
+        `trades-implied` result as equivalent to a `horizon` result.
+
+        Confidence order, highest first: `horizon` and `hubble` are read directly,
+        then `offers-implied`, then `trades-implied`.
+
+        Known limitation of this field: it squashes two different questions into one
+        enum, where the data came from and how it was reconstructed. The accurate
+        shape is two fields, a source and a derivation, and that is deferred rather
+        than forgotten.
+      enum: [horizon, hubble, offers-implied, trades-implied]
+
+    Flag:
+      type: string
+      description: |
+        A risk condition that fired. Flags are reported individually so that a
+        consumer can apply their own policy rather than depending only on the band.
+      enum:
+        - NO_EXECUTABLE_PRICE
+        - ZERO_DEPTH_2PCT
+        - MANIPULATION_CHEAP
+        - MANIPULATION_RATIO_LOW
+        - NO_GENUINE_TRADE_30D
+        - NO_GENUINE_TRADE_7D
+        - HOLDER_CONCENTRATION_EXTREME
+        - HOLDER_CONCENTRATION_HIGH
+        - THIN_DEPTH_5PCT
+        - WASH_TRADE_SUSPECTED
+        - SPREAD_EXTREME
+        - PRICE_SOURCE_CONFLICT
+
+    Band:
+      type: string
+      description: The worst flag level that fired. Not the result of a weighting.
+      enum: [LOW, MEDIUM, HIGH, CRITICAL]
+
+    BandConfidence:
+      type: string
+      description: |
+        Whether the band rests on a complete check.
+
+        `full` every flag at the CRITICAL and HIGH levels could be evaluated.
+        `partial` at least one flag at those levels could not be evaluated at all,
+        so the band is a floor rather than a verdict. It can only be worse than
+        reported, never better.
+      enum: [full, partial]
+
+    DepthPoint:
+      type: object
+      required: [delta, buySide, sellSide, fromSdex, fromAmm]
+      properties:
+        delta:
+          type: number
+          description: The relative price shift; 0.02 means 2 percent
+          enum: [0.02, 0.05, 0.1]
+        buySide:
+          allOf: [$ref: '#/components/schemas/Decimal']
+          description: |
+            The notional in the quote asset that can be absorbed by buying before
+            the marginal price passes P0 times (1 + delta). Relevant to oracle
+            manipulation risk.
+        sellSide:
+          allOf: [$ref: '#/components/schemas/Decimal']
+          description: |
+            The notional in the quote asset that can be absorbed by selling before
+            the marginal price falls below P0 times (1 - delta). Relevant to
+            liquidation risk.
+        fromSdex:
+          allOf: [$ref: '#/components/schemas/Decimal']
+          description: The SDEX orderbook contribution on the buy side, for transparency
+        fromAmm:
+          allOf: [$ref: '#/components/schemas/Decimal']
+          description: The AMM pool contribution on the buy side, for transparency
+
+    ManipulationCost:
+      type: object
+      description: |
+        One rung of the upward price manipulation simulation. The full ladder is
+        0.5, 1, 10, and 100. The large rungs are included deliberately, because an
+        asset with a broken book is invisible to the small ones.
+      required: [delta, targetPrice, cost, reachable]
+      properties:
+        delta:
+          type: number
+          description: |
+            The simulated relative price increase. 0.5 means a rise of 50 percent,
+            100 means a rise of 10000 percent.
+          enum: [0.5, 1, 10, 100]
+        targetPrice:
+          allOf: [$ref: '#/components/schemas/Decimal']
+          description: |
+            The simulated target price, that is `midPrice` times (1 + delta). It is
+            sent so that consumers do not have to recompute it and so that the
+            ladder stays readable when `midPrice` itself makes no sense.
+        cost:
+          allOf: [$ref: '#/components/schemas/Decimal']
+          description: |
+            The notional in the quote asset required to absorb every ask below
+            `targetPrice`. MUST be read together with `reachable`.
+        reachable:
+          type: boolean
+          description: |
+            True when `targetPrice` really can be attained by absorbing liquidity
+            step by step. False when liquidity runs out before `targetPrice` is
+            reached, so the price can only jump to the nearest available ask rather
+            than being walked to the target.
+
+            The combinations that must be displayed differently:
+
+            | cost | reachable | meaning |
+            |---|---|---|
+            | 0 | true | the target price is attainable at no cost |
+            | 0 | false | there is no liquidity at all in that range |
+            | > 0 | true | a real cost to reach the target |
+            | > 0 | false | the cost exhausts every ask and still does not reach the target |
+
+            THE TABLE ABOVE APPLIES TO `manipulationCostOrderbookOnly` ONLY. On
+            `manipulationCostCombined` this field is unconditionally `true`
+            whenever an active pool is present on the pair, because a constant
+            product curve has no upper price bound: the marginal price grows
+            without limit as the base reserve is drained, so no target is out of
+            reach. A `true` there is a property of the curve and not a
+            measurement of this asset, and none of the four rows above can be
+            distinguished on that ladder.
+
+            Consumers deciding whether a target is attainable MUST read
+            `manipulationCostOrderbookOnly`. That is the ladder Keel itself uses:
+            `maxSafeCollateralManipulation` and `oracleResistance.reachable` both
+            take their value from it, because an attacker takes the cheapest path
+            and orderbook-only is never above combined.
+
+            This is the same presence rule as `maxReachablePrice`, pointing the
+            other way. Presence of an active pool removes the upper bound, which
+            makes a highest price meaningless there and makes every target
+            reachable here.
+
+            See also `maxReachablePrice`.
+
+    OracleResistance:
+      type: object
+      description: |
+        The asset's resistance to oracle price manipulation. It answers one
+        question: is moving the price to a critical level cheaper than the genuine
+        trading volume that actually occurred during the window the oracle uses.
+
+        A manipulation cost on its own is not enough. A cost of 10000 XLM is cheap
+        for an asset trading 5 million XLM a day, and expensive for an asset
+        trading 200 XLM a day. It is that comparison that is reported here, not
+        the raw cost alone.
+      required: [criticalDelta, manipulationCost, reachable, genuineVolume, windowSeconds]
+      properties:
+        criticalDelta:
+          type: number
+          description: |
+            The delta treated as the critical threshold for this asset. Equal to
+            one of the `delta` values in `manipulationCostOrderbookOnly`.
+          example: 0.5
+        manipulationCost:
+          allOf: [$ref: '#/components/schemas/Decimal']
+          description: |
+            The `cost` of the `manipulationCostOrderbookOnly` entry at
+            `criticalDelta`, copied here so consumers do not have to match it up
+            themselves. The orderbook-only variant, because an attacker takes the
+            cheapest path.
+        reachable:
+          type: boolean
+          description: |
+            The `reachable` value of the same entry. When false, the
+            `manipulationCost` above does not state the cost of reaching the
+            target, and both `ratio` and `totalAttackCost` are null.
+        genuineVolume:
+          allOf: [$ref: '#/components/schemas/Decimal']
+          description: |
+            The genuine trade volume in the quote asset over the last
+            `windowSeconds`, after the genuine trade filtering rules are applied.
+            This is the comparison baseline for the manipulation cost.
+        windowSeconds:
+          type: integer
+          description: |
+            The length of the observation window in seconds, equal to
+            `oracleWindowSeconds` at GET /methodology. It is repeated here so that
+            the response can be read without calling another endpoint.
+          example: 900
+        ratio:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+          description: |
+            `manipulationCost` divided by `genuineVolume`. A value below 1 means
+            that moving the price to the critical level is cheaper than all of the
+            genuine trading across the oracle window. Null when `genuineVolume` is
+            zero or `reachable` is false, because the division is then meaningless.
+        totalAttackCost:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+          description: |
+            `manipulationCost` PLUS `genuineVolume`, added in methodology 1.0.3.
+
+            It answers a different question from `ratio`. The ratio asks whether the
+            attack is cheap relative to the market it has to hide inside, and being
+            dimensionless it can rank many assets against each other. This asks how
+            much capital an attack on an averaging oracle needs in TOTAL, because
+            the attacker has to pay the book and also outweigh the genuine volume
+            inside the window. Being in the quote asset, it can only be read against
+            one pair.
+
+            It is a LOWER BOUND. Needing exactly `genuineVolume` of extra volume to
+            dominate a volume weighted average is an approximation; what is really
+            required depends on the weighting and on where in the window the attack
+            lands.
+
+            Null when `reachable` is false, for the same reason `ratio` is.
+
+    SupportingNotes:
+      type: object
+      description: |
+        One phrase per supporting figure saying why it is null. A key is null
+        when its figure is present or no reason was recorded, so a consumer reads
+        a note only beside a null figure. The phrases are prose for a reader and
+        not an enum: do not branch on their text.
+
+        They keep apart the absences a bare null collapses. A trustline set too
+        large for the holder pull, a pair above the trade threshold, a walk that
+        spent its page bound, and a search that covered thirty whole days and
+        found no genuine trade are four different answers, and only the last is
+        a measurement.
+      required: [holders, tradesExcludedPct, volumeToSupply, lastGenuineTrade]
+      properties:
+        holders:
+          type: [string, 'null']
+          description: Why holderTop1Pct, holderTop10Pct and holderHhi are null. They come from one trustline pull and are absent together.
+        tradesExcludedPct:
+          type: [string, 'null']
+        volumeToSupply:
+          type: [string, 'null']
+          description: Why volumeToSupply is null, or, when it is present, why its d30 window is.
+        lastGenuineTrade:
+          type: [string, 'null']
+          description: |
+            Why lastGenuineTrade is null. A note that begins "not checked" means
+            the search stopped before it could answer, and is not evidence that
+            the asset has no genuine trade.
+
+    VolumeToSupply:
+      type: object
+      required: [d1, d7, d30]
+      properties:
+        d1: { $ref: '#/components/schemas/Decimal' }
+        d7: { $ref: '#/components/schemas/Decimal' }
+        d30: { $ref: '#/components/schemas/Decimal' }
+
+    LastGenuineTrade:
+      type: object
+      required: [ledgerSeq, at]
+      properties:
+        ledgerSeq:
+          type: integer
+          format: int64
+        at:
+          type: string
+          format: date-time
+
+    PairSummary:
+      type: object
+      required: [quote, band, bandConfidence]
+      description: |
+        One evaluated quote pair, reduced to the fields that are COMPARABLE ACROSS
+        PAIRS. Depth, manipulation cost and collateral are deliberately absent: each
+        is denominated in its own pair's quote asset, and two units side by side in
+        one response invite arithmetic that mixes them. A band and a confidence are
+        unitless.
+      properties:
+        quote: { $ref: '#/components/schemas/Asset' }
+        band: { $ref: '#/components/schemas/Band' }
+        bandConfidence: { $ref: '#/components/schemas/BandConfidence' }
+
+    AssetRisk:
+      type: object
+      required:
+        - asset
+        - quote
+        - ledgerSeq
+        - ledgerClosedAt
+        - computedAt
+        - methodologyVersion
+        - dataSource
+        - priceSource
+        - spreadPct
+        - depth
+        - manipulationCostCombined
+        - manipulationCostOrderbookOnly
+        - maxReachablePrice
+        - costToMaxReachablePrice
+        - flags
+        - unevaluatedFlags
+        - band
+        - bandConfidence
+        - warnings
+      properties:
+        asset: { $ref: '#/components/schemas/Asset' }
+        quote:
+          allOf: [$ref: '#/components/schemas/Asset']
+          description: The unit of every notional value in this response
+        primaryQuote:
+          allOf: [$ref: '#/components/schemas/Asset']
+          description: |
+            The quote asset every headline figure in this response is denominated
+            in. It is USDC for every asset and is not chosen per asset, so it is
+            redundant with `quote` today. It is sent anyway, because widening the
+            candidate quote set later must not silently change what an
+            already-stored row meant.
+
+            **OPTIONAL in 1.5.0 and absent from every example.** The field is
+            declared here so a consumer can be built against it; nothing populates
+            it until the multi-pair evaluation lands. Do not assume presence.
+        pairsEvaluated:
+          type: array
+          items: { $ref: '#/components/schemas/PairSummary' }
+          description: |
+            Every quote pair evaluated for this asset, the primary one included,
+            sorted by quote asset so the order is reproducible. In this version the
+            candidate set is exactly two members, USDC and native XLM, which is a
+            stated bound on FR-11 rather than an unstated shortfall.
+
+            This array exists so the cheapest-path finding survives the scope cut in
+            PRD section 12: `?quote=` is priority C and goes first, and three fields
+            per pair in the primary response do not.
+
+            **OPTIONAL in 1.5.0 and absent from every example**, for the reason on
+            `primaryQuote`.
+        bandDrivenBy:
+          allOf: [$ref: '#/components/schemas/Asset']
+          description: |
+            The quote asset of the pair whose evaluation set `band`. `band` is the
+            highest tier triggered on ANY evaluated pair, because an attacker takes
+            the cheapest path: an asset deep against USDC and thin against XLM is not
+            a safe asset.
+
+            **This is the field that makes a mixed display detectable.** When it is
+            not equal to `primaryQuote`, the warning `SECONDARY_PAIR_WORSE` is in
+            `warnings`, and `band` then describes a different market from the
+            `depth`, `manipulationCost*` and `maxSafeCollateral` beside it, which
+            always stay the primary pair's figures. A dashboard must not present the
+            two as one reading in that case.
+
+            **OPTIONAL in 1.5.0 and absent from every example**, for the reason on
+            `primaryQuote`.
+        xlmUsdcRate:
+          oneOf:
+            - $ref: '#/components/schemas/Decimal'
+            - type: 'null'
+          description: |
+            The XLM/USDC mid price at this `ledgerSeq`. Published because the
+            absolute thresholds are USDC figures, so an XLM-quoted pair is converted
+            before it is judged against them, and a reader has to be able to redo
+            that conversion with a rate of their own.
+
+            Not a price oracle: it is read from the same books and pools as
+            everything else in this response, from the deepest market on the network,
+            at the same ledger.
+
+            Null when no XLM-quoted pair was evaluated, and null when the rate was not
+            trustworthy at that ledger. The two are not distinguished by value; the
+            second case shows up in `pairsEvaluated` as an XLM entry with
+            `bandConfidence: partial`.
+
+            **OPTIONAL in 1.5.0 and absent from every example**, for the reason on
+            `primaryQuote`.
+        ledgerSeq:
+          type: integer
+          format: int64
+        ledgerClosedAt:
+          type: string
+          format: date-time
+        computedAt:
+          type: string
+          format: date-time
+        methodologyVersion:
+          type: string
+        dataSource: { $ref: '#/components/schemas/DataSource' }
+        midPrice:
+          oneOf:
+            - $ref: '#/components/schemas/Decimal'
+            - type: 'null'
+          description: |
+            Null when priceSource is none. Note that a populated midPrice is not
+            necessarily meaningful: when `SPREAD_EXTREME` fires, this number is the
+            midpoint of two prices that have nothing to do with each other.
+        priceSource:
+          type: string
+          enum: [book, pool, none]
+          description: |
+            `book` means the orderbook mid, `pool` means the pool spot price,
+            `none` means the asset has no executable price at all. The value `none`
+            is not an error.
+
+            Changed in methodology 1.0.3. `pool` no longer means only that the book
+            was empty or one sided. When both a book and a pool exist and they
+            disagree by more than `priceDivergencePct`, the pool wins, because it is
+            backed by executable liquidity in both directions, and
+            `PRICE_SOURCE_CONFLICT` fires. Read `poolSpotPrice` and
+            `priceDivergencePct` to see the disagreement rather than only its
+            outcome.
+        spreadPct:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+          description: |
+            The difference between the best ask and the best bid divided by
+            `midPrice`, expressed in PERCENT, following the convention of every
+            field in this API whose name ends in `Pct`. A value of '196.0777141'
+            means a spread of 196 percent.
+
+            Null when either side of the book is empty or when `priceSource` is not
+            `book`, because a spread is undefined without two sides of a book.
+
+            A value above `spreadExtremePct` triggers `SPREAD_EXTREME`. Above that
+            threshold, `midPrice` and every metric derived from it, including the
+            2/5/10 percent depth ladder, lose their meaning.
+        poolSpotPrice:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+          description: |
+            The marginal price of the AMM pool with the largest quote reserve,
+            reported whenever an active pool exists, whichever source `priceSource`
+            ended up naming. A consumer comparing two price sources needs both
+            numbers and not only the one that won.
+
+            Null when there is no active pool.
+        priceDivergencePct:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+          description: |
+            The distance between the orderbook mid and `poolSpotPrice`, in PERCENT.
+            Above `priceDivergencePct` at GET /methodology, `priceSource` becomes
+            `pool` and `PRICE_SOURCE_CONFLICT` fires.
+
+            Null when there is no active pool. Null means undefined here and not
+            zero: an asset with no pool has no divergence, while a zero would claim
+            the two sources agree.
+        depth:
+          type: array
+          items: { $ref: '#/components/schemas/DepthPoint' }
+          minItems: 3
+          maxItems: 3
+        manipulationCostCombined:
+          type: array
+          description: |
+            The 0.5, 1, 10, 100 ladder in ascending delta order, counting BOTH the
+            orderbook and every active AMM pool. An empty array when there is no
+            executable price.
+
+            RENAMED in contract 1.3.0, from `manipulationCost`. Methodology 1.0.3
+            split this metric in two because they answer different questions, and a
+            single name could only have meant one of them.
+          items: { $ref: '#/components/schemas/ManipulationCost' }
+          maxItems: 4
+        manipulationCostOrderbookOnly:
+          type: array
+          description: |
+            The same ladder counting the ORDERBOOK ONLY.
+
+            `manipulationCostOrderbookOnly[i].cost` is always less than or equal to
+            `manipulationCostCombined[i].cost`, because combined is the same book
+            plus an AMM term. An attacker takes the cheapest path, so this is the
+            binding figure and it is the one used in `maxSafeCollateral`.
+
+            **The gap between the two is itself the signal.** An asset with a large
+            combined cost and a small orderbook-only cost looks defended and is not,
+            and that is exactly what happened on 22 February 2026: an honest pool
+            held the price at 1.0555 throughout, moving the real market price to
+            106.74 would have cost about 147.96 USDC, and the attacker paid zero by
+            using the orderbook alone. A display that shows only one of these two
+            numbers should show this one.
+
+            That an oracle reads only SDEX trades is an INFERENCE from that
+            incident, not a confirmed fact about any oracle.
+          items: { $ref: '#/components/schemas/ManipulationCost' }
+          maxItems: 4
+        costToMaxReachablePrice:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+          description: |
+            What reaching `maxReachablePrice` costs, meaning the sum of every ask
+            notional strictly below it.
+
+            Read this together with `maxReachablePrice` and not on its own. The
+            pair is what catches an attack that lands between two rungs of the
+            manipulation ladder, and on the USTRY fixture it is the only thing
+            that caught the real one: the highest reachable price was 106.7372828
+            and reaching it cost zero.
+
+            Note the shape of the definition. Because the sum is over asks
+            strictly below the maximum, a book whose only ask IS the maximum
+            yields zero here by construction, for any asset. A zero is therefore
+            a statement about the shape of the book, not a discovery about the
+            asset, and a display should say how many ask levels exist beside it.
+
+            Null in the same two situations as `maxReachablePrice`.
+        maxReachablePrice:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+          description: |
+            The highest price still attainable by absorbing every available ask.
+            This is the real upper bound on price movement through the orderbook.
+
+            Every `manipulationCostOrderbookOnly` entry whose `targetPrice` sits above this
+            value is necessarily `reachable: false`.
+
+            Null in two situations: there is no ask at all on this pair, or an
+            active pool is present on it. Both fields are meaningful only for a
+            pure orderbook market. Under a constant product curve the price tends
+            to infinity as the base reserve tends to zero, so every target is
+            reachable and a highest price has no meaning.
+
+            THE RULE IS PRESENCE, NOT EXCLUSIVITY, and the difference is the
+            whole of it. A pair carrying BOTH a book and an active pool reports
+            null here, not the book's highest ask. Until contract 1.4.3 this
+            description keyed the null on the pool being the sole source of
+            liquidity, which gives the opposite answer on exactly that market,
+            and the AssetHealthy example below was built on the old reading.
+            `docs/methodology/05-manipulation-cost.md` section 5 is the binding
+            definition and `internal/domain.maxReachable` already implemented it;
+            this description was the only place that disagreed.
+        oracleResistance:
+          oneOf: [$ref: '#/components/schemas/OracleResistance', type: 'null']
+          description: |
+            Null in two cases, and `warnings` names which. When there is no
+            executable price, because then there is no price to move. And when the
+            genuine volume inside the oracle window was not measured at THIS row's
+            ledger: the object pairs a manipulation cost at this ledger with the
+            volume in the `windowSeconds` before it, and a volume from another
+            instant would make that pairing meaningless. A reconstructed historical
+            row carries no trade history and is null for the second reason.
+        maxSafeCollateral:
+          oneOf:
+            - $ref: '#/components/schemas/Decimal'
+            - type: 'null'
+          description: |
+            The recommended maximum collateral size in the quote asset, the MINIMUM
+            of the two terms below. Null when it cannot be computed, for example
+            because there is no executable price.
+        maxSafeCollateralLiquidation:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+          description: |
+            The liquidation term, `depth.sellSide` at the liquidation delta times
+            the haircut. Always present when `maxSafeCollateral` is.
+
+            Reported separately because the minimum alone hides WHICH limit binds,
+            and that is the part a lender acts on. A position limited by liquidation
+            depth and one limited by manipulation cost call for different responses.
+        maxSafeCollateralManipulation:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+          description: |
+            The manipulation term, `manipulationCostOrderbookOnly` at the critical
+            delta times the safety margin.
+
+            Null when the critical target is UNREACHABLE through the orderbook. The
+            term is then not applied at all, `maxSafeCollateral` falls back to the
+            liquidation term alone, and a `warnings` entry says so. Null here means
+            not applicable, and it is not zero: zero would claim the attack is free.
+        holderTop1Pct:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        holderTop10Pct:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        holderHhi:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        volumeToSupply:
+          oneOf: [$ref: '#/components/schemas/VolumeToSupply', type: 'null']
+        lastGenuineTrade:
+          oneOf: [$ref: '#/components/schemas/LastGenuineTrade', type: 'null']
+          description: Null when no genuine trade was found at all
+        tradesExcludedPct:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+          description: |
+            The percentage of 30 day volume excluded by the genuine trade rules. A
+            high value indicates suspected wash trading.
+        supportingNotes:
+          oneOf: [$ref: '#/components/schemas/SupportingNotes', type: 'null']
+          description: |
+            Why each absent supporting figure above is absent. Added in 1.9.0.
+
+            Null when there is nothing to explain: every supporting figure is
+            present, or the row was stored before the engine recorded reasons, or
+            the row is a reconstruction, whose reasons travel in `warnings`.
+        flags:
+          type: array
+          description: The flags that are `triggered`.
+          items: { $ref: '#/components/schemas/Flag' }
+        unevaluatedFlags:
+          type: array
+          description: |
+            The flags that could NOT be checked, because the data they need is
+            absent from this response's inputs.
+
+            `unevaluated` is not a synonym for `clear`. A flag missing from both
+            `flags` and `unevaluatedFlags` was checked and found not to apply. A
+            flag listed here was never checked at all, and an asset with no
+            trustline data must not be displayed as though its holder distribution
+            had been examined and found safe.
+          items: { $ref: '#/components/schemas/Flag' }
+        band: { $ref: '#/components/schemas/Band' }
+        bandConfidence:
+          allOf: [$ref: '#/components/schemas/BandConfidence']
+          description: |
+            Whether the band rests on a complete check. **The dashboard is
+            required to display this.** A `LOW` band with `partial` confidence is a
+            far weaker statement than `LOW` with `full`, and hiding the difference
+            makes an unchecked asset look safe.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: |
+            Notes about the limitations of the computation behind this response.
+            These should be shown to the user, not hidden.
+        reconstruction:
+          $ref: '#/components/schemas/Reconstruction'
+
+    Reconstruction:
+      type: object
+      description: |
+        What the acquisition of a RECONSTRUCTED book detected about its own
+        completeness. Added in 1.7.0 by DEC-022.
+
+        **ABSENT MEANS THIS ROW IS NOT A RECONSTRUCTION. It never means a walk ran
+        and found nothing.** A `horizon` response reads the live book directly and
+        walks nothing, so it has no gaps to report and this key is omitted rather
+        than sent as null. A consumer that renders "gaps: unknown" beside a direct
+        reading has read the absence backwards.
+
+        **EVERY COUNTER IN HERE REMOVES OFFERS, so a row carrying them describes a
+        book that is too THIN and never too deep.** Read its depth as a lower bound
+        and its risk as an upper bound. The two gaps that would run the other way,
+        a book inflated by offers that were already eaten and a crossed book, can
+        never appear on a stored row: a reconstruction carrying either is refused
+        before it is computed, with no override.
+
+        **It is not a quality score and not a proof.** Zero everywhere means this
+        walk detected nothing, not that it saw every offer. An offer whose owner
+        never traded and is not resting today is invisible to this method, which is
+        the limitation `01-data-sources.md` states and this object cannot see.
+
+        `warnings` carries the same facts as sentences. Both are sent on purpose:
+        this object is for a consumer that branches, the prose is for the reader of
+        a response who never will.
+      required:
+        - truncated
+        - stoppedAtFloor
+        - failed
+        - unsizable
+        - missingOffers
+        - floorLedger
+        - accountsWalked
+      properties:
+        truncated:
+          type: integer
+          description: Account walks that reached their page cap before the account ran out of operations
+        stoppedAtFloor:
+          type: integer
+          description: |
+            Account walks that ended at the operation floor rather than at the
+            account's own first operation. Read it with `floorLedger`: an offer
+            created before that ledger is invisible to this row.
+        failed:
+          type: integer
+          description: Account walks that failed at the data source and contributed no offers
+        unsizable:
+          type: integer
+          description: Operation results whose remaining amount could not be read
+        missingOffers:
+          type: integer
+          description: |
+            Offers that a later trade named as resting and that this walk never saw
+            created. Each one is a hole the reconstruction found in itself.
+        floorLedger:
+          type: integer
+          format: int64
+          description: |
+            The operation floor the walk was given, or 0 when it was given none.
+            Present so that `stoppedAtFloor` can be read as a statement about which
+            offers are missing rather than as a bare count.
+        accountsWalked:
+          type: integer
+          description: |
+            The denominator for the three walk counters above. 42 of 65 is a
+            different statement from 42 of 400.
+
+    AssetSummary:
+      type: object
+      required: [asset, quote, band, bandConfidence, flags, ledgerSeq]
+      properties:
+        asset: { $ref: '#/components/schemas/Asset' }
+        quote: { $ref: '#/components/schemas/Asset' }
+        midPrice:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        priceSource:
+          type: string
+          enum: [book, pool, none]
+        depth5PctBuySide:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        maxSafeCollateral:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        band: { $ref: '#/components/schemas/Band' }
+        bandConfidence:
+          allOf: [$ref: '#/components/schemas/BandConfidence']
+          description: |
+            Present on the list row as well as on the detail response, because the
+            list is where a band is read fastest and with the least context. A row
+            showing `LOW` with no confidence marker is exactly the misleading
+            display the methodology forbids.
+        flags:
+          type: array
+          items: { $ref: '#/components/schemas/Flag' }
+        ledgerSeq:
+          type: integer
+          format: int64
+
+    AssetListResponse:
+      type: object
+      required: [items, total, limit, offset, methodologyVersion]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AssetSummary' }
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        methodologyVersion:
+          type: string
+
+    HistoryPoint:
+      type: object
+      required: [ledgerSeq, ledgerClosedAt, band, flags]
+      properties:
+        ledgerSeq:
+          type: integer
+          format: int64
+        ledgerClosedAt:
+          type: string
+          format: date-time
+        midPrice:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        depth2PctBuySide:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        depth5PctBuySide:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        depth10PctBuySide:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        manipulationCost50Pct:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        maxSafeCollateral:
+          oneOf: [$ref: '#/components/schemas/Decimal', type: 'null']
+        band: { $ref: '#/components/schemas/Band' }
+        flags:
+          type: array
+          items: { $ref: '#/components/schemas/Flag' }
+
+    HistoryResponse:
+      type: object
+      required: [asset, quote, from, to, resolution, methodologyVersion, dataSource, points]
+      properties:
+        asset: { $ref: '#/components/schemas/Asset' }
+        quote: { $ref: '#/components/schemas/Asset' }
+        from:
+          type: integer
+          format: int64
+        to:
+          type: integer
+          format: int64
+        resolution:
+          type: string
+          enum: [hour, day]
+        methodologyVersion:
+          type: string
+        dataSource: { $ref: '#/components/schemas/DataSource' }
+        gaps:
+          type: array
+          description: |
+            Ledger ranges inside the request for which no data is available. The
+            dashboard is required to display these gaps rather than interpolate
+            across them.
+          items:
+            type: object
+            required: [from, to, reason]
+            properties:
+              from: { type: integer, format: int64 }
+              to: { type: integer, format: int64 }
+              reason: { type: string }
+        points:
+          type: array
+          items: { $ref: '#/components/schemas/HistoryPoint' }
+
+    Health:
+      type: object
+      required: [status, methodologyVersion]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        latestScanAt:
+          type: string
+          format: date-time
+        latestScanLedgerSeq:
+          type: integer
+          format: int64
+        assetsMonitored:
+          type: integer
+        methodologyVersion:
+          type: string
+        historicalAvailable:
+          type: boolean
+          description: False when the Hubble path is currently unavailable
+        buildRevision:
+          type: string
+          description: >-
+            The commit this binary was built from, stamped at link time. It is a
+            different question from methodologyVersion beside it: that one names
+            the definitions the numbers follow, this one names the build that
+            produced them, and two deployments can agree on the first while
+            disagreeing on the second. Always present. Reads "unknown" on a build
+            that carried no stamp, which is the honest answer for a local `go
+            build` and a signal worth investigating on a deployed one.
+
+    Methodology:
+      type: object
+      required: [version, documentUrl, calibrated, thresholds]
+      properties:
+        version:
+          type: string
+        documentUrl:
+          type: string
+          format: uri
+        calibrated:
+          type: boolean
+          description: Always false in v1. The thresholds are chosen, not calibrated.
+        calibrationNote:
+          type: string
+        thresholds:
+          type: object
+          description: |
+            A map of named thresholds. It is open ended: new keys can appear
+            without a major API version bump, so consumers are required to read
+            them by key name rather than by position.
+
+            Unit convention: every key ending in `Pct` is expressed in percent, not
+            as a fraction. `spreadExtremePct: '20.0'` means 20 percent and is
+            compared directly against `spreadPct` in an asset response.
+          additionalProperties: true
+          properties:
+            spreadExtremePct:
+              allOf: [$ref: '#/components/schemas/Decimal']
+              description: |
+                The threshold that triggers SPREAD_EXTREME, in percent. Above this
+                threshold the reference price is considered meaningless and the
+                asset enters band HIGH.
+            priceDivergencePct:
+              allOf: [$ref: '#/components/schemas/Decimal']
+              description: |
+                How far the orderbook mid may sit from the pool spot price before
+                the pool is preferred as the reference price, in percent. Crossing
+                it sets `priceSource` to `pool` and fires
+                `PRICE_SOURCE_CONFLICT`. Added in methodology 1.0.3.
+            oracleWindowSeconds:
+              type: integer
+              description: |
+                The assumed length of the window an oracle uses to average prices,
+                in seconds. Used as the comparison baseline for genuine volume in
+                `oracleResistance`. This threshold is chosen, not read from any
+                oracle, because every oracle has its own window.
+            manipulationRatioLowPct:
+              allOf: [$ref: '#/components/schemas/Decimal']
+              description: |
+                The threshold that triggers MANIPULATION_RATIO_LOW, in percent,
+                following the convention above.
+
+                The rule multiplies the manipulation cost over the circulating
+                supply VALUE by 100 before the comparison, so the factor of 100
+                belongs to the rule and not to this number: '0.1' means a tenth of
+                one percent. Stated explicitly because that is the ambiguity
+                DEC-017 was written to settle, and the two readings of it differ
+                by a hundredfold. The value moved from 1.0 to 0.1 on 10 September
+                2026 by that record.
+            liquidationDelta:
+              type: number
+              description: |
+                The downward price move the collateral calculation assumes, as a
+                relative shift; 0.1 means 10 percent. This is "the liquidation
+                delta" named in `maxSafeCollateralLiquidation`, and it selects
+                which rung of the `depth` ladder that term reads.
+
+                Sent as a NUMBER and not a string. That is the same exception
+                point 1 of this API's description makes for `delta`, and for the
+                same reason: it is a ladder position, not a monetary value.
+            liquidationHaircut:
+              allOf: [$ref: '#/components/schemas/Decimal']
+              description: |
+                The share of `depth.sellSide` at `liquidationDelta` that the
+                liquidation term is allowed to claim. This is "the haircut" named
+                in `maxSafeCollateralLiquidation`.
+
+                A FRACTION and not a percent: '0.5' means half. The name carries
+                no `Pct` suffix for exactly that reason, which is the only signal
+                distinguishing it from the keys above it.
+            manipulationCriticalDelta:
+              type: number
+              description: |
+                The rung of the `manipulationCostOrderbookOnly` ladder that the
+                manipulation term of `maxSafeCollateral` reads; 0.5 means 50
+                percent. This is "the critical delta" named in
+                `maxSafeCollateralManipulation`, and it is where that term's
+                `reachable` check is made.
+
+                It does NOT scope the MANIPULATION_CHEAP flag, which scans every
+                reachable rung rather than this one. A number, for the reason given
+                on `liquidationDelta`.
+            manipulationMargin:
+              allOf: [$ref: '#/components/schemas/Decimal']
+              description: |
+                The share of the manipulation cost at `manipulationCriticalDelta`
+                that the manipulation term is allowed to claim. This is "the safety
+                margin" named in `maxSafeCollateralManipulation`. A fraction and not
+                a percent, as with `liquidationHaircut`.
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - INVALID_ASSET_ID
+                - INVALID_RANGE
+                - ASSET_NOT_MONITORED
+                - LEDGER_NOT_AVAILABLE
+                - HISTORICAL_UNAVAILABLE
+                - RATE_LIMITED
+            message:
+              type: string
+              description: A message that may be shown directly to the user
+            detail:
+              type: object
+              additionalProperties: true
+
+  responses:
+
+    BadRequest:
+      description: Invalid parameter
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            assetIdSalah:
+              value:
+                error:
+                  code: INVALID_ASSET_ID
+                  message: >-
+                    Invalid assetId format. Use CODE:ISSUER for an issued asset or
+                    XLM for the native asset.
+            rentangTerlaluPanjang:
+              value:
+                error:
+                  code: INVALID_RANGE
+                  message: The maximum range is 90 days per request.
+                  detail:
+                    requestedLedgers: 1200000
+                    maxLedgers: 1555200
+
+    NotFound:
+      description: |
+        The asset is not monitored, or the requested ledger is not available. Both
+        are ordinary conditions, not system failures.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            asetTidakDipantau:
+              value:
+                error:
+                  code: ASSET_NOT_MONITORED
+                  message: >-
+                    This asset is not part of the demonstration set. See
+                    GET /v1/assets for the list of monitored assets.
+            ledgerBelumTersedia:
+              value:
+                error:
+                  code: LEDGER_NOT_AVAILABLE
+                  message: >-
+                    Historical data for this ledger is not available yet.
+                    Historical data is refreshed in daily batches.
+                  detail:
+                    requestedLedger: 61999999
+                    earliestAvailable: 60100000
+                    latestAvailable: 61180000
+
+    HistoricalUnavailable:
+      description: The historical path is currently unavailable. The live path is unaffected.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error:
+              code: HISTORICAL_UNAVAILABLE
+              message: >-
+                The historical data service is currently unavailable. Current
+                metrics remain accessible without the ledger parameter.
+
+    RateLimited:
+      description: Exceeded 60 requests per minute
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error:
+              code: RATE_LIMITED
+              message: The limit of 60 requests per minute was exceeded.
+
+  examples:
+
+    AssetHealthy:
+      summary: A liquid asset with both an orderbook and a pool
+      value:
+        asset:
+          code: USDC
+          type: credit_alphanum4
+          issuer: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+        quote:
+          code: XLM
+          type: native
+          issuer: null
+        ledgerSeq: 61234567
+        ledgerClosedAt: '2026-08-19T04:12:31Z'
+        computedAt: '2026-08-19T04:15:02Z'
+        methodologyVersion: 1.0.8-draft
+        dataSource: horizon
+        midPrice: '2.8419300'
+        priceSource: book
+        poolSpotPrice: '2.8390000'
+        priceDivergencePct: '0.1030000'
+        spreadPct: '0.0844000'
+        depth:
+          - delta: 0.02
+            buySide: '184220.4183100'
+            sellSide: '176905.2210400'
+            fromSdex: '142880.9910200'
+            fromAmm: '41339.4272900'
+          - delta: 0.05
+            buySide: '441038.9920700'
+            sellSide: '428771.0044300'
+            fromSdex: '337920.1180600'
+            fromAmm: '103118.8740100'
+          - delta: 0.1
+            buySide: '852119.7714000'
+            sellSide: '839004.5512800'
+            fromSdex: '648221.9014000'
+            fromAmm: '203897.8700000'
+        manipulationCostCombined:
+          - delta: 0.5
+            targetPrice: '4.2628950'
+            cost: '3910442.1180000'
+            reachable: true
+          - delta: 1.0
+            targetPrice: '5.6838600'
+            cost: '8422018.7710000'
+            reachable: true
+          - delta: 10
+            targetPrice: '31.2612300'
+            cost: '48210559.4400000'
+            reachable: true
+          - delta: 100
+            targetPrice: '287.0349300'
+            cost: '61044180.2200000'
+            reachable: true
+        manipulationCostOrderbookOnly:
+          - delta: 0.5
+            targetPrice: '4.2628950'
+            cost: '3910442.1180000'
+            reachable: true
+          - delta: 1.0
+            targetPrice: '5.6838600'
+            cost: '8422018.7710000'
+            reachable: true
+          - delta: 10
+            targetPrice: '31.2612300'
+            cost: '48210559.4400000'
+            reachable: true
+          - delta: 100
+            targetPrice: '287.0349300'
+            cost: '61044180.2200000'
+            reachable: false
+        maxReachablePrice: null
+        costToMaxReachablePrice: null
+        oracleResistance:
+          criticalDelta: 0.5
+          manipulationCost: '3910442.1180000'
+          reachable: true
+          genuineVolume: '184402.9100000'
+          windowSeconds: 900
+          ratio: '21.2060000'
+          totalAttackCost: '4094845.0280000'
+        maxSafeCollateral: '419502.2756400'
+        maxSafeCollateralLiquidation: '419502.2756400'
+        maxSafeCollateralManipulation: '512300.0000000'
+        holderTop1Pct: '11.4200000'
+        holderTop10Pct: '38.9100000'
+        holderHhi: '0.0412000'
+        volumeToSupply:
+          d1: '0.0184000'
+          d7: '0.1102000'
+          d30: '0.4471000'
+        lastGenuineTrade:
+          ledgerSeq: 61234559
+          at: '2026-08-19T04:11:47Z'
+        tradesExcludedPct: '2.1000000'
+        supportingNotes: null
+        flags: []
+        unevaluatedFlags: []
+        band: LOW
+        bandConfidence: full
+        warnings:
+          - >-
+            maxReachablePrice and costToMaxReachablePrice are null because an
+            active pool is present: under a constant product curve the price
+            tends to infinity as the base reserve tends to zero, so every target
+            is reachable and a highest price has no meaning
+
+    AssetPoolOnly:
+      summary: An asset with no orderbook, only an AMM pool
+      value:
+        asset:
+          code: RWAX
+          type: credit_alphanum4
+          issuer: GDAHBQY3L2VLORCYFFNJ4ON64RZDSMVPB32MPA6MZGY42YZD246H2FJ5
+        quote:
+          code: XLM
+          type: native
+          issuer: null
+        ledgerSeq: 61234567
+        ledgerClosedAt: '2026-08-19T04:12:31Z'
+        computedAt: '2026-08-19T04:15:04Z'
+        methodologyVersion: 1.0.8-draft
+        dataSource: horizon
+        midPrice: '0.4410000'
+        priceSource: pool
+        poolSpotPrice: '0.4410000'
+        priceDivergencePct: null
+        spreadPct: null
+        depth:
+          - delta: 0.02
+            buySide: '1092.0044000'
+            sellSide: '1103.1180000'
+            fromSdex: '0.0000000'
+            fromAmm: '1092.0044000'
+          - delta: 0.05
+            buySide: '2710.9910000'
+            sellSide: '2777.4420000'
+            fromSdex: '0.0000000'
+            fromAmm: '2710.9910000'
+          - delta: 0.1
+            buySide: '5355.8800000'
+            sellSide: '5631.0210000'
+            fromSdex: '0.0000000'
+            fromAmm: '5355.8800000'
+        manipulationCostCombined:
+          - delta: 0.5
+            targetPrice: '0.6615000'
+            cost: '24418.0900000'
+            reachable: true
+          - delta: 1.0
+            targetPrice: '0.8820000'
+            cost: '45441.7700000'
+            reachable: true
+          - delta: 10
+            targetPrice: '4.8510000'
+            cost: '218044.1100000'
+            reachable: true
+          - delta: 100
+            targetPrice: '44.5410000'
+            cost: '1010288.4400000'
+            reachable: true
+        manipulationCostOrderbookOnly:
+          - delta: 0.5
+            targetPrice: '0.6615000'
+            cost: '24418.0900000'
+            reachable: true
+          - delta: 1.0
+            targetPrice: '0.8820000'
+            cost: '45441.7700000'
+            reachable: true
+          - delta: 10
+            targetPrice: '4.8510000'
+            cost: '218044.1100000'
+            reachable: true
+          - delta: 100
+            targetPrice: '44.5410000'
+            cost: '1010288.4400000'
+            reachable: true
+        maxReachablePrice: null
+        costToMaxReachablePrice: null
+        oracleResistance:
+          criticalDelta: 0.5
+          manipulationCost: '24418.0900000'
+          reachable: true
+          genuineVolume: '0.0000000'
+          windowSeconds: 900
+          ratio: null
+          totalAttackCost: '24418.0900000'
+        maxSafeCollateral: '2677.9400000'
+        maxSafeCollateralLiquidation: '2677.9400000'
+        maxSafeCollateralManipulation: null
+        holderTop1Pct: '61.8800000'
+        holderTop10Pct: '92.4100000'
+        holderHhi: '0.4128000'
+        volumeToSupply:
+          d1: '0.0000000'
+          d7: '0.0009000'
+          d30: '0.0041000'
+        lastGenuineTrade:
+          ledgerSeq: 61102331
+          at: '2026-08-11T22:04:19Z'
+        tradesExcludedPct: '18.4000000'
+        supportingNotes: null
+        flags:
+          - THIN_DEPTH_5PCT
+          - HOLDER_CONCENTRATION_EXTREME
+          - NO_GENUINE_TRADE_7D
+          - HOLDER_CONCENTRATION_HIGH
+        unevaluatedFlags: []
+        band: HIGH
+        bandConfidence: full
+        warnings:
+          - There is no SDEX orderbook. The reference price is taken from the pool spot price.
+          - The liquidity comes from a single AMM pool.
+          - >-
+            spreadPct is null because there are not two sides of a book.
+            maxReachablePrice is null because an AMM curve has no upper price bound,
+            so every manipulation rung is reachable and only the cost differs.
+          - >-
+            There was no genuine trade within the 900 second oracle window, so the
+            oracle resistance ratio cannot be computed.
+
+    AssetNoPrice:
+      summary: An asset with no executable price. This is HTTP 200, not an error.
+      value:
+        asset:
+          code: USTRY
+          type: credit_alphanum12
+          issuer: GBTVRMGKICFP3DB2U57IHURHMTU7EVSOU5R7H47DQJZFQZLYLKSXUJZE
+        quote:
+          code: XLM
+          type: native
+          issuer: null
+        ledgerSeq: 61234567
+        ledgerClosedAt: '2026-08-19T04:12:31Z'
+        computedAt: '2026-08-19T04:15:06Z'
+        methodologyVersion: 1.0.8-draft
+        dataSource: horizon
+        midPrice: null
+        priceSource: none
+        poolSpotPrice: null
+        priceDivergencePct: null
+        spreadPct: null
+        depth:
+          - delta: 0.02
+            buySide: '0.0000000'
+            sellSide: '0.0000000'
+            fromSdex: '0.0000000'
+            fromAmm: '0.0000000'
+          - delta: 0.05
+            buySide: '0.0000000'
+            sellSide: '0.0000000'
+            fromSdex: '0.0000000'
+            fromAmm: '0.0000000'
+          - delta: 0.1
+            buySide: '0.0000000'
+            sellSide: '0.0000000'
+            fromSdex: '0.0000000'
+            fromAmm: '0.0000000'
+        manipulationCostCombined: []
+        manipulationCostOrderbookOnly: []
+        maxReachablePrice: null
+        costToMaxReachablePrice: null
+        oracleResistance: null
+        maxSafeCollateral: null
+        maxSafeCollateralLiquidation: null
+        maxSafeCollateralManipulation: null
+        holderTop1Pct: '88.2100000'
+        holderTop10Pct: '99.1400000'
+        holderHhi: '0.7821000'
+        volumeToSupply:
+          d1: '0.0000000'
+          d7: '0.0000000'
+          d30: '0.0000000'
+        lastGenuineTrade: null
+        tradesExcludedPct: null
+        supportingNotes:
+          holders: null
+          tradesExcludedPct: no trade in the 30 day window, so there is no volume to exclude from
+          volumeToSupply: null
+          lastGenuineTrade: no genuine trade in the 30 whole day(s) searched
+        flags:
+          - NO_EXECUTABLE_PRICE
+          - ZERO_DEPTH_2PCT
+          - NO_GENUINE_TRADE_30D
+          - NO_GENUINE_TRADE_7D
+          - HOLDER_CONCENTRATION_EXTREME
+          - HOLDER_CONCENTRATION_HIGH
+        unevaluatedFlags: []
+        band: CRITICAL
+        bandConfidence: full
+        warnings:
+          - There is neither an orderbook nor a pool for this pair.
+          - >-
+            An asset with no executable price cannot be assessed as collateral by
+            any method. This is a finding, not a computation failure.
+
+    AssetHistorical:
+      # THE SOURCE HERE READ `hubble` UNTIL 1.7.0 AND THE SERVER COULD NEVER SEND
+      # IT. The handler behind `?ledger=` asks the store for `offers-implied` rows
+      # and has done since 5 September 2026; `hubble` is deferred by DEC-002 and no
+      # row carrying it can exist, so this example described a response this API has
+      # never produced and the generated mock shipped it to the frontend. That is
+      # the failure DEC-014 section 5 records, found again in the example rather
+      # than in a threshold. Corrected with the addition of `reconstruction`, since
+      # both belong to the same response.
+      #
+      # ONE EXAMPLE ELSEWHERE STILL CARRIES `hubble` ON PURPOSE: HistoryUstry, for
+      # `GET /history?source=hubble`. That parameter genuinely accepts the value and
+      # answers with an empty series, so the example describes a reachable request.
+      # This one did not.
+      summary: A historical replay result, reconstructed from operations, with the gaps it found in itself
+      value:
+        asset:
+          code: USTRY
+          type: credit_alphanum12
+          issuer: GBTVRMGKICFP3DB2U57IHURHMTU7EVSOU5R7H47DQJZFQZLYLKSXUJZE
+        quote:
+          code: XLM
+          type: native
+          issuer: null
+        ledgerSeq: 60912345
+        ledgerClosedAt: '2026-05-19T11:02:44Z'
+        computedAt: '2026-08-19T02:40:11Z'
+        methodologyVersion: 1.0.8-draft
+        dataSource: offers-implied
+        midPrice: '0.0104200'
+        priceSource: book
+        poolSpotPrice: null
+        priceDivergencePct: null
+        spreadPct: '3.4100000'
+        depth:
+          - delta: 0.02
+            buySide: '41.2200000'
+            sellSide: '38.9100000'
+            fromSdex: '41.2200000'
+            fromAmm: '0.0000000'
+          - delta: 0.05
+            buySide: '104.8800000'
+            sellSide: '96.4400000'
+            fromSdex: '104.8800000'
+            fromAmm: '0.0000000'
+          - delta: 0.1
+            buySide: '211.0400000'
+            sellSide: '190.2200000'
+            fromSdex: '211.0400000'
+            fromAmm: '0.0000000'
+        manipulationCostCombined:
+          - delta: 0.5
+            targetPrice: '0.0156300'
+            cost: '892.4100000'
+            reachable: true
+          - delta: 1.0
+            targetPrice: '0.0208400'
+            cost: '1544.8800000'
+            reachable: true
+          - delta: 10
+            targetPrice: '0.1146200'
+            cost: '2210.4400000'
+            reachable: false
+          - delta: 100
+            targetPrice: '1.0524200'
+            cost: '2210.4400000'
+            reachable: false
+        manipulationCostOrderbookOnly:
+          - delta: 0.5
+            targetPrice: '0.0156300'
+            cost: '892.4100000'
+            reachable: true
+          - delta: 1.0
+            targetPrice: '0.0208400'
+            cost: '1544.8800000'
+            reachable: true
+          - delta: 10
+            targetPrice: '0.1146200'
+            cost: '2210.4400000'
+            reachable: false
+          - delta: 100
+            targetPrice: '1.0524200'
+            cost: '2210.4400000'
+            reachable: false
+        maxReachablePrice: '0.0891000'
+        costToMaxReachablePrice: '2183.6500000'
+        oracleResistance:
+          criticalDelta: 0.5
+          manipulationCost: '892.4100000'
+          reachable: true
+          genuineVolume: '0.0000000'
+          windowSeconds: 900
+          ratio: null
+          totalAttackCost: '892.4100000'
+        maxSafeCollateral: '95.1100000'
+        maxSafeCollateralLiquidation: '95.1100000'
+        maxSafeCollateralManipulation: '118.4000000'
+        holderTop1Pct: '79.4400000'
+        holderTop10Pct: '96.8800000'
+        holderHhi: '0.6412000'
+        volumeToSupply:
+          d1: '0.0000000'
+          d7: '0.0002000'
+          d30: '0.0011000'
+        lastGenuineTrade:
+          ledgerSeq: 60874120
+          at: '2026-05-16T08:33:02Z'
+        tradesExcludedPct: '64.2000000'
+        supportingNotes: null
+        flags:
+          - MANIPULATION_CHEAP
+          - MANIPULATION_RATIO_LOW
+          - THIN_DEPTH_5PCT
+          - NO_GENUINE_TRADE_7D
+          - HOLDER_CONCENTRATION_EXTREME
+          - HOLDER_CONCENTRATION_HIGH
+          - WASH_TRADE_SUSPECTED
+        unevaluatedFlags: []
+        band: CRITICAL
+        bandConfidence: full
+        warnings:
+          - There was no AMM liquidity for this pair at that ledger.
+          - >-
+            The delta 10 and 100 rungs were not reached. Every ask is exhausted at
+            a price of 0.0891000. The cost of 2210.4400000 on both of those rungs
+            is the cost of exhausting the book, not the cost of reaching the target
+            price.
+          - >-
+            There was no genuine trade within the 900 second oracle window, so the
+            oracle resistance ratio cannot be computed.
+          - >-
+            reconstructed book: 42 of 65 account walk(s) stopped at the operation
+            floor at ledger 61300000, so an offer created before that ledger is
+            invisible to this row
+          - >-
+            reconstructed book: 3 of 65 account walk(s) reached their page cap
+            before the account ran out of operations
+          - >-
+            every gap above REMOVES offers, so this book is too THIN and never too
+            deep: read its depth as a lower bound and its risk as an upper bound
+        reconstruction:
+          truncated: 3
+          stoppedAtFloor: 42
+          failed: 0
+          unsizable: 0
+          missingOffers: 0
+          floorLedger: 61300000
+          accountsWalked: 65
+
+    AssetBrokenBook:
+      summary: >-
+        assetBrokenBook. A book with a spread of 196 percent. HTTP 200, not an
+        error, and not a normal condition. It needs a display of its own.
+      description: |
+        This is the third state the frontend has to distinguish, alongside a
+        healthy asset and an asset with no price.
+
+        USTRY/USDC moments before ledger 61340263, a real state on the ledger, not
+        invented numbers. The book held exactly one ask at 106.7372828 and exactly
+        one bid at 1.0570000. The midpoint is 53.8971414 for an asset actually
+        worth about 1.06.
+
+        What the display has to do in this state:
+
+        1. Do not present `midPrice` as a price. It is the midpoint of two prices
+           that have nothing to do with each other. If it is shown at all, mark it
+           as meaningless.
+        2. Damp down or demote the 2/5/10 percent depth ladder. All three are
+           derived from a `midPrice` that no longer means anything, and they are
+           still reported only because the SOW promised them, not because they are
+           useful here.
+        3. Promote the `manipulationCost` rungs at delta 10 and 100 along with
+           `maxReachablePrice`. On a book this broken it is the large rungs and
+           `SPREAD_EXTREME` that carry the information, not the mandated ladder.
+        4. Distinguish `cost: '0'` with `reachable: false` from `cost: '0'` with
+           `reachable: true`. See point 7 in the API description.
+
+        Every number in this example is ALREADY FILLED IN from the golden fixture
+        at testdata/fixtures/ustry_pre_exploit.md, which was computed by hand
+        before any implementation existed. The `TODO-FIXTURE` markers and
+        `reachable: null` are gone.
+
+        ONE CORRECTION AGAINST THE PREVIOUS VERSION. The delta 1.0 entry previously
+        read `reachable: true`. That was WRONG and it is exactly the mistake that
+        point 7 of the API description warns about. The most expensive ask on the
+        book is priced at 106.7372828, below the target of 107.7942828, so no ask
+        satisfies `>= target` and `reachable` is false. The `cost: '130.0627093'`
+        on that row does NOT state the cost of reaching the target, because the
+        target cannot be reached at all.
+
+        The field shapes, field names, and types are final and safe for the
+        frontend to start building against.
+      value:
+        asset:
+          code: USTRY
+          type: credit_alphanum12
+          issuer: GCRYUGD5NVARGXT56XEZI5CIFCQETYHAPQQTHO2O3IQZTHDH4LATMYWC
+        quote:
+          code: USDC
+          type: credit_alphanum4
+          issuer: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+        ledgerSeq: 61340263
+        ledgerClosedAt: '2026-02-22T00:10:21Z'
+        computedAt: '2026-08-19T04:15:08Z'
+        methodologyVersion: 1.0.8-draft
+        dataSource: offers-implied
+        midPrice: '53.8971414'
+        priceSource: book
+        poolSpotPrice: null
+        priceDivergencePct: null
+        spreadPct: '196.0777141'
+        depth:
+          - delta: 0.02
+            buySide: '0.0000000'
+            sellSide: '0.0000000'
+            fromSdex: '0.0000000'
+            fromAmm: '0.0000000'
+          - delta: 0.05
+            buySide: '0.0000000'
+            sellSide: '0.0000000'
+            fromSdex: '0.0000000'
+            fromAmm: '0.0000000'
+          - delta: 0.1
+            buySide: '0.0000000'
+            sellSide: '0.0000000'
+            fromSdex: '0.0000000'
+            fromAmm: '0.0000000'
+        manipulationCostCombined:
+          - delta: 0.5
+            targetPrice: '80.8457121'
+            cost: '0.0000000'
+            reachable: true
+          - delta: 1.0
+            targetPrice: '107.7942828'
+            cost: '130.0627093'
+            reachable: false
+          - delta: 10
+            targetPrice: '592.8685554'
+            cost: '130.0627093'
+            reachable: false
+          - delta: 100
+            targetPrice: '5443.6112814'
+            cost: '130.0627093'
+            reachable: false
+        manipulationCostOrderbookOnly:
+          - delta: 0.5
+            targetPrice: '80.8457121'
+            cost: '0.0000000'
+            reachable: true
+          - delta: 1.0
+            targetPrice: '107.7942828'
+            cost: '130.0627093'
+            reachable: false
+          - delta: 10
+            targetPrice: '592.8685554'
+            cost: '130.0627093'
+            reachable: false
+          - delta: 100
+            targetPrice: '5443.6112814'
+            cost: '130.0627093'
+            reachable: false
+        maxReachablePrice: '106.7372828'
+        costToMaxReachablePrice: '0.0000000'
+        oracleResistance: null
+        maxSafeCollateral: '0.0000000'
+        maxSafeCollateralLiquidation: '0.0000000'
+        maxSafeCollateralManipulation: '0.0000000'
+        holderTop1Pct: null
+        holderTop10Pct: null
+        holderHhi: null
+        volumeToSupply: null
+        lastGenuineTrade: null
+        tradesExcludedPct: null
+        supportingNotes: null
+        flags:
+          - ZERO_DEPTH_2PCT
+          - MANIPULATION_CHEAP
+          - SPREAD_EXTREME
+          - THIN_DEPTH_5PCT
+        unevaluatedFlags:
+          - MANIPULATION_RATIO_LOW
+          - NO_GENUINE_TRADE_30D
+          - NO_GENUINE_TRADE_7D
+          - WASH_TRADE_SUSPECTED
+          - HOLDER_CONCENTRATION_EXTREME
+          - HOLDER_CONCENTRATION_HIGH
+        band: CRITICAL
+        bandConfidence: partial
+        warnings:
+          - >-
+            A spread of 196.0777141 percent exceeds the spreadExtremePct threshold.
+            The midPrice of 53.8971414 is the midpoint of an ask at 106.7372828 and
+            a bid at 1.0570000, two prices unrelated to each other. Every metric
+            derived from midPrice, including the 2/5/10 percent depth ladder, is
+            meaningless in this response.
+          - >-
+            There is no AMM pool for this pair, so every fromAmm value is zero and
+            maxReachablePrice is determined entirely by the orderbook.
+          - >-
+            dataSource is offers-implied. The orderbook snapshot at this ledger was
+            unavailable, so both sides of the book were reconstructed by folding the
+            offer operations and the trades that consumed them forward to it. That
+            is a reconstruction, so the depth figures are not a direct measurement,
+            but it is a stronger source than trades-implied would be: an offer
+            proves liquidity that was posted, while a trade proves only liquidity
+            that was consumed.
+          - >-
+            A cost of 0.0000000 at delta 0.5 with reachable true is the most
+            dangerous condition Keel can report: the price 80.8457121 is attainable
+            without paying anything to a third party. Compare that with delta 1.0,
+            10, and 100, whose cost is 130.0627093 but whose reachable is false;
+            there the book runs out before the target and that cost figure does not
+            mean the target is expensive to reach.
+          - >-
+            maxSafeCollateral is 0.0000000 because the sell side depth at the
+            liquidation delta is zero, so the first term of C_max is zero and the
+            minimum is zero with it.
+          - >-
+            Six flags could not be assessed from this snapshot because they require
+            supply data, trade history, or trustline distribution. They are listed
+            in unevaluatedFlags, and bandConfidence is partial as a result. The band
+            still reads CRITICAL because two CRITICAL flags are already triggered,
+            so the missing data does not change the conclusion here. That is a
+            coincidence of this case and not a guarantee: partial means the band is
+            a floor, and it can only be worse than reported.
+          - >-
+            oracleResistance is null because genuine trade volume within the oracle
+            window cannot be computed from an orderbook snapshot alone. Null means
+            unknown, not zero.
+
+    AssetListMixed:
+      summary: An asset list with a mix of bands
+      description: |
+        Every row here carries `bandConfidence: full`. The `partial` case is real
+        and occurs on this endpoint too; the `assetBrokenBook` detail example shows
+        it. A dedicated list example holding a partial row is still missing, which
+        is recorded as an open item in DEC-003 section 6.
+      value:
+        total: 53
+        limit: 3
+        offset: 0
+        methodologyVersion: 1.0.8-draft
+        items:
+          - asset:
+              code: USDC
+              type: credit_alphanum4
+              issuer: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+            quote: { code: XLM, type: native, issuer: null }
+            midPrice: '2.8419300'
+            priceSource: book
+            depth5PctBuySide: '441038.9920700'
+            maxSafeCollateral: '419502.2756400'
+            band: LOW
+            bandConfidence: full
+            flags: []
+            ledgerSeq: 61234567
+          - asset:
+              code: RWAX
+              type: credit_alphanum4
+              issuer: GDAHBQY3L2VLORCYFFNJ4ON64RZDSMVPB32MPA6MZGY42YZD246H2FJ5
+            quote: { code: XLM, type: native, issuer: null }
+            midPrice: '0.4410000'
+            priceSource: pool
+            depth5PctBuySide: '2710.9910000'
+            maxSafeCollateral: '2677.9400000'
+            band: HIGH
+            bandConfidence: full
+            flags:
+              - THIN_DEPTH_5PCT
+              - HOLDER_CONCENTRATION_EXTREME
+              - NO_GENUINE_TRADE_7D
+              - HOLDER_CONCENTRATION_HIGH
+            ledgerSeq: 61234567
+          - asset:
+              code: USTRY
+              type: credit_alphanum12
+              issuer: GBTVRMGKICFP3DB2U57IHURHMTU7EVSOU5R7H47DQJZFQZLYLKSXUJZE
+            quote: { code: XLM, type: native, issuer: null }
+            midPrice: null
+            priceSource: none
+            depth5PctBuySide: '0.0000000'
+            maxSafeCollateral: null
+            band: CRITICAL
+            bandConfidence: full
+            flags:
+              - NO_EXECUTABLE_PRICE
+              - ZERO_DEPTH_2PCT
+              - NO_GENUINE_TRADE_30D
+              - NO_GENUINE_TRADE_7D
+              - HOLDER_CONCENTRATION_EXTREME
+              - HOLDER_CONCENTRATION_HIGH
+            ledgerSeq: 61234567
+
+    HistoryUstry:
+      summary: A time series with a data gap; note the gaps array
+      value:
+        asset:
+          code: USTRY
+          type: credit_alphanum12
+          issuer: GBTVRMGKICFP3DB2U57IHURHMTU7EVSOU5R7H47DQJZFQZLYLKSXUJZE
+        quote: { code: XLM, type: native, issuer: null }
+        from: 60890000
+        to: 60950000
+        resolution: day
+        methodologyVersion: 1.0.8-draft
+        dataSource: hubble
+        gaps:
+          - from: 60901000
+            to: 60903500
+            reason: No state snapshot is available for this ledger range
+        points:
+          - ledgerSeq: 60890120
+            ledgerClosedAt: '2026-05-17T00:04:11Z'
+            midPrice: '0.0101100'
+            depth2PctBuySide: '48.9000000'
+            depth5PctBuySide: '122.4000000'
+            depth10PctBuySide: '244.1000000'
+            manipulationCost50Pct: '1044.2000000'
+            maxSafeCollateral: '110.8000000'
+            band: CRITICAL
+            flags: [MANIPULATION_CHEAP, THIN_DEPTH_5PCT, HOLDER_CONCENTRATION_EXTREME]
+          - ledgerSeq: 60912345
+            ledgerClosedAt: '2026-05-19T11:02:44Z'
+            midPrice: '0.0104200'
+            depth2PctBuySide: '41.2200000'
+            depth5PctBuySide: '104.8800000'
+            depth10PctBuySide: '211.0400000'
+            manipulationCost50Pct: '892.4100000'
+            maxSafeCollateral: '95.1100000'
+            band: CRITICAL
+            flags: [MANIPULATION_CHEAP, THIN_DEPTH_5PCT, HOLDER_CONCENTRATION_EXTREME]
+          - ledgerSeq: 60934000
+            ledgerClosedAt: '2026-05-20T14:48:02Z'
+            midPrice: '1.0420000'
+            depth2PctBuySide: '39.8000000'
+            depth5PctBuySide: '99.1000000'
+            depth10PctBuySide: '198.4000000'
+            manipulationCost50Pct: '870.0000000'
+            maxSafeCollateral: '90.2000000'
+            band: CRITICAL
+            flags: [MANIPULATION_CHEAP, THIN_DEPTH_5PCT, HOLDER_CONCENTRATION_EXTREME]

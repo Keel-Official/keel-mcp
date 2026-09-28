@@ -1,9 +1,22 @@
 {
-  "name": "keel-mcp",
+  "name": "@keel-official/mcp",
+  "mcpName": "io.github.Keel-Official/keel-mcp",
   "version": "0.1.0",
   "description": "Model Context Protocol server for Keel, the liquidity risk engine for Stellar. Read-only.",
   "type": "module",
   "license": "MIT",
+  "author": "Keel",
+  "homepage": "https://keels.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Keel-Official/keel-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Keel-Official/keel-mcp/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "keel-mcp": "dist/index.js"
   },

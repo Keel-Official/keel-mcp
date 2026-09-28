@@ -1,0 +1,40 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Keel-Official/keel-mcp",
+  "title": "Keel",
+  "description": "Read-only liquidity risk for Stellar assets: executable depth, safe collateral size, risk bands.",
+  "websiteUrl": "https://keels.app",
+  "repository": {
+    "url": "https://github.com/Keel-Official/keel-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@keel-official/mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "KEEL_API_URL",
+          "description": "Keel API base URL. Defaults to the public API.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string",
+          "default": "https://api.keels.app/v1"
+        },
+        {
+          "name": "KEEL_TIMEOUT_MS",
+          "description": "Per request timeout in milliseconds.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "number",
+          "default": "15000"
+        }
+      ]
+    }
+  ]
+}
