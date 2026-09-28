@@ -1,0 +1,130 @@
+{
+  "asset": {
+    "code": "USTRY",
+    "type": "credit_alphanum12",
+    "issuer": "GCRYUGD5NVARGXT56XEZI5CIFCQETYHAPQQTHO2O3IQZTHDH4LATMYWC"
+  },
+  "quote": {
+    "code": "USDC",
+    "type": "credit_alphanum4",
+    "issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+  },
+  "ledgerSeq": 64657818,
+  "ledgerClosedAt": "2026-09-28T05:54:31Z",
+  "computedAt": "2026-09-28T05:54:37.420051Z",
+  "methodologyVersion": "1.0.8-draft",
+  "dataSource": "horizon",
+  "midPrice": "1.07547199999950015",
+  "priceSource": "book",
+  "poolSpotPrice": "1.0758122117950935",
+  "priceDivergencePct": "0.03162371572504040780140632",
+  "spreadPct": "0.04999999999999534390481574",
+  "depth": [
+    {
+      "delta": 0.02,
+      "buySide": "276270.8897704251961744479268768805",
+      "sellSide": "266417.56703834650614326186390829585687749564376338307",
+      "fromSdex": "276270.7267225662160375996555",
+      "fromAmm": "0.1630478589801368482713768805"
+    },
+    {
+      "delta": 0.05,
+      "buySide": "276383.5202189124453220186284681822",
+      "sellSide": "266505.371603766468220299516589438384987296523108803146",
+      "fromSdex": "276383.1116655661115375996555",
+      "fromAmm": "0.4085533463337844189729681822"
+    },
+    {
+      "delta": 0.1,
+      "buySide": "276482.7888936601965027113709815695",
+      "sellSide": "266505.801860662977718427105325306934941167566246390263",
+      "fromSdex": "276481.9788326321115375996555",
+      "fromAmm": "0.8100610280849651117154815695"
+    }
+  ],
+  "manipulationCostCombined": [
+    {
+      "delta": 0.5,
+      "targetPrice": "1.613207999999250225",
+      "cost": "276485.7183261051718424766657293485",
+      "reachable": true
+    },
+    {
+      "delta": 1,
+      "targetPrice": "2.1509439999990003",
+      "cost": "276488.8730849800479007077894694053",
+      "reachable": true
+    },
+    {
+      "delta": 10,
+      "targetPrice": "11.83019199999450165",
+      "cost": "276520.5492879138975672233094071316",
+      "reachable": true
+    },
+    {
+      "delta": 100,
+      "targetPrice": "108.62267199994951515",
+      "cost": "284463.2231983136200347945556799235",
+      "reachable": true
+    }
+  ],
+  "manipulationCostOrderbookOnly": [
+    {
+      "delta": 0.5,
+      "targetPrice": "1.613207999999250225",
+      "cost": "276481.9788326321115375996555",
+      "reachable": true
+    },
+    {
+      "delta": 1,
+      "targetPrice": "2.1509439999990003",
+      "cost": "276481.9788326321115375996555",
+      "reachable": true
+    },
+    {
+      "delta": 10,
+      "targetPrice": "11.83019199999450165",
+      "cost": "276481.9788326321115375996555",
+      "reachable": true
+    },
+    {
+      "delta": 100,
+      "targetPrice": "108.62267199994951515",
+      "cost": "284312.5403792154954575996555",
+      "reachable": true
+    }
+  ],
+  "maxReachablePrice": null,
+  "costToMaxReachablePrice": null,
+  "oracleResistance": null,
+  "maxSafeCollateral": "69120.494708158027884399913875",
+  "maxSafeCollateralLiquidation": "133252.9009303314888592135526626534674705837831231951315",
+  "maxSafeCollateralManipulation": "69120.494708158027884399913875",
+  "holderTop1Pct": "91.46273471304816235001610107",
+  "holderTop10Pct": "99.93550740466219481562393315",
+  "holderHhi": "8399.418631821456434443082368341829217318251055108084661",
+  "volumeToSupply": null,
+  "lastGenuineTrade": null,
+  "tradesExcludedPct": null,
+  "supportingNotes": {
+    "holders": null,
+    "tradesExcludedPct": "the newest trade reading is anchored more than 48h0m0s ago, so it was not used",
+    "volumeToSupply": "the newest trade reading is anchored more than 48h0m0s ago, so it was not used",
+    "lastGenuineTrade": "the newest trade reading is anchored more than 48h0m0s ago, so it was not used"
+  },
+  "flags": [
+    "HOLDER_CONCENTRATION_EXTREME",
+    "HOLDER_CONCENTRATION_HIGH"
+  ],
+  "unevaluatedFlags": [
+    "NO_GENUINE_TRADE_30D",
+    "NO_GENUINE_TRADE_7D",
+    "WASH_TRADE_SUSPECTED"
+  ],
+  "band": "HIGH",
+  "bandConfidence": "partial",
+  "warnings": [
+    "maxReachablePrice and costToMaxReachablePrice are null because an active pool is present: under a constant product curve the price tends to infinity as the base reserve tends to zero, so every target is reachable and a highest price has no meaning",
+    "oracleResistance was not computed: genuine volume in the 900 second oracle window was not measured at this ledger"
+  ]
+}

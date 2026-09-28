@@ -1,0 +1,130 @@
+{
+  "asset": {
+    "code": "XLM",
+    "type": "native",
+    "issuer": null
+  },
+  "quote": {
+    "code": "USDC",
+    "type": "credit_alphanum4",
+    "issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+  },
+  "ledgerSeq": 64657820,
+  "ledgerClosedAt": "2026-09-28T05:54:41Z",
+  "computedAt": "2026-09-28T05:54:43.852357Z",
+  "methodologyVersion": "1.0.8-draft",
+  "dataSource": "horizon",
+  "midPrice": "0.2092854",
+  "priceSource": "book",
+  "poolSpotPrice": "0.2095961819525245",
+  "priceDivergencePct": "0.14827653329815665514649802",
+  "spreadPct": "0.04720826201923306642508269",
+  "depth": [
+    {
+      "delta": 0.02,
+      "buySide": "85051.6505580668713829549357111923",
+      "sellSide": "101242.695597585921382405638090203557751716856519376465",
+      "fromSdex": "59964.21114995468057878460314",
+      "fromAmm": "25087.4394081121908041703325711923"
+    },
+    {
+      "delta": 0.05,
+      "buySide": "462141.8733967817433486742213792287",
+      "sellSide": "153909.142670192048999131926214419818791233743725283195",
+      "fromSdex": "396883.67478896552227255756904",
+      "fromAmm": "65258.1986078162210761166523392287"
+    },
+    {
+      "delta": 0.1,
+      "buySide": "561769.527131143892948017066144864",
+      "sellSide": "261872.207158251947620343650766858123939727035784534215",
+      "fromSdex": "430814.75866529982473563499422",
+      "fromAmm": "130954.768465844068212382071924864"
+    }
+  ],
+  "manipulationCostCombined": [
+    {
+      "delta": 0.5,
+      "targetPrice": "0.3139281",
+      "cost": "1150353.5183676596174160128204244558",
+      "reachable": true
+    },
+    {
+      "delta": 1,
+      "targetPrice": "0.4185708",
+      "cost": "1667584.3282993286493065329451038198",
+      "reachable": true
+    },
+    {
+      "delta": 10,
+      "targetPrice": "2.3021394",
+      "cost": "6850593.2057492847351849357189603959",
+      "reachable": true
+    },
+    {
+      "delta": 100,
+      "targetPrice": "21.1378254",
+      "cost": "25194943.9521271523580688421057038939",
+      "reachable": true
+    }
+  ],
+  "manipulationCostOrderbookOnly": [
+    {
+      "delta": 0.5,
+      "targetPrice": "0.3139281",
+      "cost": "540071.27495461975296407381987",
+      "reachable": true
+    },
+    {
+      "delta": 1,
+      "targetPrice": "0.4185708",
+      "cost": "541105.64275453417296407381987",
+      "reachable": false
+    },
+    {
+      "delta": 10,
+      "targetPrice": "2.3021394",
+      "cost": "541105.64275453417296407381987",
+      "reachable": false
+    },
+    {
+      "delta": 100,
+      "targetPrice": "21.1378254",
+      "cost": "541105.64275453417296407381987",
+      "reachable": false
+    }
+  ],
+  "maxReachablePrice": null,
+  "costToMaxReachablePrice": null,
+  "oracleResistance": null,
+  "maxSafeCollateral": "130936.1035791259738101718253834290619698635178922671075",
+  "maxSafeCollateralLiquidation": "130936.1035791259738101718253834290619698635178922671075",
+  "maxSafeCollateralManipulation": "135017.8187386549382410184549675",
+  "holderTop1Pct": null,
+  "holderTop10Pct": null,
+  "holderHhi": null,
+  "volumeToSupply": null,
+  "lastGenuineTrade": null,
+  "tradesExcludedPct": null,
+  "supportingNotes": {
+    "holders": "XLM is the native asset and has no trustlines, so there is no holder set to measure",
+    "tradesExcludedPct": "the newest trade reading is anchored more than 48h0m0s ago, so it was not used",
+    "volumeToSupply": "the newest trade reading is anchored more than 48h0m0s ago, so it was not used",
+    "lastGenuineTrade": "the newest trade reading is anchored more than 48h0m0s ago, so it was not used"
+  },
+  "flags": [],
+  "unevaluatedFlags": [
+    "MANIPULATION_RATIO_LOW",
+    "NO_GENUINE_TRADE_30D",
+    "HOLDER_CONCENTRATION_EXTREME",
+    "NO_GENUINE_TRADE_7D",
+    "HOLDER_CONCENTRATION_HIGH",
+    "WASH_TRADE_SUSPECTED"
+  ],
+  "band": "LOW",
+  "bandConfidence": "partial",
+  "warnings": [
+    "maxReachablePrice and costToMaxReachablePrice are null because an active pool is present: under a constant product curve the price tends to infinity as the base reserve tends to zero, so every target is reachable and a highest price has no meaning",
+    "oracleResistance was not computed: genuine volume in the 900 second oracle window was not measured at this ledger"
+  ]
+}

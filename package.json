@@ -1,0 +1,55 @@
+{
+  "name": "keel-mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for Keel, the liquidity risk engine for Stellar. Read-only.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "keel-mcp": "dist/index.js"
+  },
+  "main": "dist/server.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "stellar",
+    "defi",
+    "liquidity",
+    "risk",
+    "keel"
+  ],
+  "keel": {
+    "contractVersion": "1.9.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/chmod-bin.mjs",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "generate:api": "openapi-typescript openapi/keel-openapi.yaml -o src/api/schema.d.ts",
+    "sync:contract": "node scripts/sync-contract.mjs && npm run generate:api",
+    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "decimal.js": "^10.6.0",
+    "openapi-fetch": "^0.17.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "openapi-typescript": "^7.9.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
